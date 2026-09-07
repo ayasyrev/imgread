@@ -115,3 +115,45 @@ def test_sdist_checker_accepts_own_source_and_rejects_missing_license(tmp_path):
     pack()
     with pytest.raises(ValueError, match="missing license text"):
         checker.check(artifact)
+
+
+def test_macos_checker_excludes_only_the_declared_install_name(tmp_path, monkeypatch):
+    import zipfile
+
+    spec = spec_from_file_location("check_artifacts", SCRIPTS / "check_artifacts.py")
+    checker = module_from_spec(spec)
+    spec.loader.exec_module(checker)
+    prefix = f"imgread-{checker.EXPECTED_VERSION}.dist-info/"
+    metadata = f"Name: imgread\nVersion: {checker.EXPECTED_VERSION}\nLicense-Expression: MIT\nRequires-Python: >=3.11,<3.15\n"
+    metadata += "".join(f"License-File: {name}\n" for name in checker.REQUIRED_LICENSES)
+    artifact = tmp_path / f"imgread-{checker.EXPECTED_VERSION}-cp311-cp311-macosx_11_0_arm64.whl"
+    with zipfile.ZipFile(artifact, "w") as archive:
+        archive.writestr(prefix + "METADATA", metadata + "\n# imgread\n")
+        for name in checker.REQUIRED_LICENSES:
+            archive.writestr(prefix + "licenses/" + name, (checker.ROOT / name).read_bytes())
+        archive.writestr("imgread/__init__.pyi", "fixture\n")
+        archive.writestr("imgread/py.typed", "")
+        archive.writestr("imgread/_native.cpython-311-darwin.so", b"\xcf\xfa\xed\xfefixture")
+
+    own_name = "@rpath/imgread._native.cpython-311-darwin.so"
+    install_names = [own_name]
+    libraries = [own_name, "/usr/lib/libiconv.2.dylib", "/usr/lib/libSystem.B.dylib"]
+
+    def otool(command, *, text):
+        assert command[0] == "otool" and text
+        header = str(command[2]) + ":\n"
+        if command[1] == "-D":
+            return header + "\n".join(install_names) + "\n"
+        assert command[1] == "-L"
+        return header + "".join(f"\t{name} (compatibility version 1.0.0, current version 1.0.0)\n" for name in libraries)
+
+    monkeypatch.setattr(checker.subprocess, "check_output", otool)
+    checker.check(artifact)
+    for name in ("@rpath/libjpeg.dylib", "/opt/homebrew/lib/libjpeg.dylib"):
+        libraries.append(name)
+        with pytest.raises(ValueError, match="undeclared macOS dependency"):
+            checker.check(artifact)
+        libraries.pop()
+    install_names.clear()
+    with pytest.raises(ValueError, match="undeclared macOS dependency"):
+        checker.check(artifact)

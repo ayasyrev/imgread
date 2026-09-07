@@ -76,8 +76,16 @@ def check(path, allow_local=False):
                     glibc = [tuple(map(int, match)) for match in re.findall(r"GLIBC_(\d+)\.(\d+)", versions)]
                     require(max(glibc, default=(0, 0)) <= (2, 17), "glibc exceeds 2.17")
             else:
+                # otool -L includes LC_ID_DYLIB as well as imported libraries.
+                # Exclude only the object's own install name reported by -D.
+                install_names = {
+                    line.strip() for line in subprocess.check_output(
+                        ["otool", "-D", str(binary)], text=True).splitlines()[1:]
+                }
                 libraries = subprocess.check_output(["otool", "-L", str(binary)], text=True).splitlines()[1:]
-                require(all(line.strip().startswith(("/usr/lib/", "/System/Library/")) for line in libraries), f"undeclared macOS dependency: {libraries}")
+                dependencies = [line.strip().split(" (compatibility version ", 1)[0] for line in libraries]
+                dependencies = [name for name in dependencies if name not in install_names]
+                require(all(name.startswith(("/usr/lib/", "/System/Library/")) for name in dependencies), f"undeclared macOS dependency: {dependencies}")
     print(f"Verified {path.name}")
 
 
