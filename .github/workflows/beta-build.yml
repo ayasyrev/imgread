@@ -95,7 +95,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - uses: dtolnay/rust-toolchain@1.95.0
       - run: uv sync --locked --no-install-project
-      - run: cargo metadata --locked --format-version 1 > /dev/null
+      - run: cargo metadata --locked --all-features --format-version 1 > /dev/null
       - run: CARGO_NET_OFFLINE=true uv run --no-sync maturin sdist --out dist
       - run: uv run --no-sync twine check dist/*
       - run: uv run --no-sync python scripts/check_artifacts.py dist/*
