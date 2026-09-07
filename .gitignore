@@ -1,0 +1,12 @@
+\.worktrees/
+target/
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+tmp/
+.uv-cache/
+dist/
+python/imgread/*.so
+python/imgread/*.pyd
+python/imgread/*.dylib

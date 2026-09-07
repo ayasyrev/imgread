@@ -1,0 +1,129 @@
+name: Beta release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  TURBOJPEG_STATIC: '1'
+  TURBOJPEG_SOURCE: vendor
+
+jobs:
+  version:
+    # Builds are available in private repositories through beta-build.yml.
+    # Publishing is enabled only by an explicit setting on the public destination.
+    if: github.event.repository.private == false && vars.PUBLIC_RELEASE_REPOSITORY == github.repository
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: test "$(git cat-file -t "$GITHUB_REF")" = tag
+      - uses: astral-sh/setup-uv@v6
+      - id: version
+        run: |
+          uv run --no-project python - <<'PY'
+          import os, tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path('Cargo.toml').read_text())['package']['version'].replace('-beta.', 'b')
+          assert os.environ['GITHUB_REF'] == 'refs/tags/v' + version, 'Run against the immutable release tag'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('version=' + version + '\n')
+          PY
+
+      - name: Verify public destination and package URLs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = false
+          uv run --no-project python scripts/repository_metadata.py "$GITHUB_REPOSITORY" --check
+
+      - name: Require manual production approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY/environments/pypi" --jq 'any(.protection_rules[]?; .type == "required_reviewers" and (.reviewers | length) > 0)')" = true
+
+  build:
+    needs: version
+    uses: ./.github/workflows/beta-build.yml
+
+  testpypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/imgread
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: beta-dist
+      - run: sha256sum --check SHA256SUMS
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  testpypi-smoke:
+    needs: [version, testpypi]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-15-intel, macos-15]
+        python: ['3.11', '3.12', '3.13', '3.14']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv venv --python '${{ matrix.python }}' .smoke
+      - run: |
+          uv pip install --python .smoke/bin/python --only-binary=:all: numpy pillow pytest
+      - name: Install exact TestPyPI wheel without source or dependency fallback
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          uv pip install --python .smoke/bin/python --no-deps --only-binary=:all: --index-url https://test.pypi.org/simple/ "imgread==$VERSION"
+      - run: uv run --no-project --python .smoke/bin/python pytest python_tests -q
+
+  pypi:
+    needs: testpypi-smoke
+    runs-on: ubuntu-latest
+    # Configure required reviewers on this environment before enabling releases.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/imgread
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: beta-dist
+      - run: sha256sum --check SHA256SUMS
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  pypi-smoke:
+    needs: [version, pypi]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-15-intel, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv venv --python 3.13 .smoke
+      - env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          uv pip install --python .smoke/bin/python --only-binary=:all: "imgread==$VERSION" pillow pytest
+      - run: uv run --no-project --python .smoke/bin/python pytest python_tests -q

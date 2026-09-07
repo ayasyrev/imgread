@@ -1,0 +1,56 @@
+[build-system]
+requires = ["maturin>=1.11,<1.12"]
+build-backend = "maturin"
+
+[project]
+name = "imgread"
+dynamic = ["version"]
+description = "Bounded JPEG, PNG and TIFF decoding into NumPy arrays"
+requires-python = ">=3.11,<3.15"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/**/*"]
+dependencies = ["numpy>=1.26"]
+authors = [{ name = "Andrei Yasyrev" }]
+maintainers = [{ name = "Andrei Yasyrev" }]
+keywords = ["image", "numpy", "jpeg", "png", "tiff", "turbojpeg"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Topic :: Multimedia :: Graphics",
+  "Typing :: Typed",
+]
+
+
+[dependency-groups]
+dev = [
+  "maturin>=1.11,<1.12",
+  "pillow>=12.3",
+  "pytest>=9.0",
+  "pip-audit>=2.10",
+  "twine>=6.2",
+]
+
+[tool.maturin]
+module-name = "imgread._native"
+python-source = "python"
+features = ["extension-module", "turbojpeg"]
+exclude = ["AGENTS.md", "CLAUDE.md", "conductor/**", "docs/**", "tmp/**", "target/**", ".venv/**", ".pytest_cache/**", "**/__pycache__/**", ".uv-cache/**", ".agents/**", ".codex/**"]
+include = [
+  { path = "Cargo.lock", format = "sdist" },
+  { path = "python_tests/**", format = "sdist" },
+  { path = "tests/**", format = "sdist" },
+  { path = "scripts/**", format = "sdist" },
+]
+
+[project.urls]
+Homepage = "https://github.com/ayasyrev/imgread"
+Repository = "https://github.com/ayasyrev/imgread"
+Issues = "https://github.com/ayasyrev/imgread/issues"

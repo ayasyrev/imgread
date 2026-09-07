@@ -1,0 +1,139 @@
+name: Beta artifacts
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  TURBOJPEG_STATIC: '1'
+  TURBOJPEG_SOURCE: vendor
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  wheels:
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            deployment: ''
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            deployment: '10.13'
+          - os: macos-15
+            target: aarch64-apple-darwin
+            deployment: '11.0'
+    runs-on: ${{ matrix.os }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.11
+            3.12
+            3.13
+            3.14
+      - uses: astral-sh/setup-uv@v6
+      - if: runner.os == 'macOS'
+        run: brew install nasm
+      - name: Build Linux wheels in manylinux2014
+        if: runner.os == 'Linux'
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        env:
+          RUSTFLAGS: --remap-path-prefix=/io=. --remap-path-prefix=/github=. --remap-path-prefix=/root=.
+          CFLAGS: -ffile-prefix-map=/io=. -ffile-prefix-map=/github=. -ffile-prefix-map=/root=.
+        with:
+          maturin-version: '1.11.5'
+          rust-toolchain: '1.95.0'
+          target: ${{ matrix.target }}
+          manylinux: '2014'
+          before-script-linux: |
+            yum install -y nasm cmake
+          args: --release --locked --out dist -i python3.11 python3.12 python3.13 python3.14
+          docker-options: -e RUSTFLAGS -e CFLAGS -e TURBOJPEG_STATIC=1 -e TURBOJPEG_SOURCE=vendor
+      - name: Build macOS wheels
+        if: runner.os == 'macOS'
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        env:
+          RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=. --remap-path-prefix=/Users/runner=.
+          CFLAGS: -ffile-prefix-map=/Users/runner=.
+        with:
+          maturin-version: '1.11.5'
+          rust-toolchain: '1.95.0'
+          target: ${{ matrix.target }}
+          args: --release --locked --out dist -i python3.11 python3.12 python3.13 python3.14
+      - name: Verify metadata, tags and native dependencies
+        run: uv run --no-project python scripts/check_artifacts.py dist/*.whl
+      - name: Test every installed wheel in a clean environment
+        shell: bash
+        run: |
+          for py in 3.11 3.12 3.13 3.14; do
+            abi="cp${py/./}"
+            uv venv --python "$py" ".test-$py"
+            uv pip install --python ".test-$py/bin/python" --only-binary=:all: dist/*-"$abi"-"$abi"-*.whl pillow pytest
+            uv run --no-project --python ".test-$py/bin/python" pytest python_tests -q
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.target }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - run: uv sync --locked --no-install-project
+      - run: cargo metadata --locked --format-version 1 > /dev/null
+      - run: CARGO_NET_OFFLINE=true uv run --no-sync maturin sdist --out dist
+      - run: uv run --no-sync twine check dist/*
+      - run: uv run --no-sync python scripts/check_artifacts.py dist/*
+      - name: Rebuild wheel from the sdist in isolation
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake nasm
+          mkdir /tmp/sdist-build
+          tar -xf dist/*.tar.gz -C /tmp/sdist-build
+          cd /tmp/sdist-build/imgread-*
+          uv run --no-project --with 'maturin>=1.11,<1.12' maturin build --release --locked
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  assemble:
+    needs: [wheels, sdist]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: release-artifacts/dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: release-artifacts/dist
+      - name: Freeze the complete artifact set
+        run: |
+          test "$(find release-artifacts/dist -name '*.whl' | wc -l)" -eq 12
+          test "$(find release-artifacts/dist -name '*.tar.gz' | wc -l)" -eq 1
+          cd release-artifacts
+          sha256sum dist/* > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beta-dist
+          path: release-artifacts/
+          if-no-files-found: error
+          retention-days: 90
