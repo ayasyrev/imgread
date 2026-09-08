@@ -47,3 +47,8 @@ def test_process_methods(method, warm):
 @pytest.mark.parametrize("mode", ["pickle", "overlap", "fifo", "constructor-no-io", "import-no-torch"])
 def test_lifecycle(mode):
     assert probe(mode)
+
+
+@pytest.mark.parametrize("method", mp.get_all_start_methods())
+def test_pickle_preserves_path_spelling_and_errors(method):
+    assert probe("path-spelling", "--method", method)

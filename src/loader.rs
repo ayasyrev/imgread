@@ -194,7 +194,12 @@ impl Loader {
         let rebuild = PyModule::import(py, "imgread._loader_pickle")?.getattr("rebuild")?;
         let paths = match &self.paths {
             None => py.None(),
-            Some(paths) => PyTuple::new(py, paths)?.into_any().unbind(),
+            // PathBuf converts through pathlib.Path, which normalizes spelling.
+            // OsStr converts losslessly to a filesystem string, preserving even
+            // trailing separators and Unix surrogateescaped filename bytes.
+            Some(paths) => PyTuple::new(py, paths.iter().map(|path| path.as_os_str()))?
+                .into_any()
+                .unbind(),
         };
         let backend = match self.backend {
             DecodeBackend::Auto => "auto",

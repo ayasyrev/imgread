@@ -101,6 +101,70 @@ def pickle_probe(path):
     return results
 
 
+def path_outcomes(loader):
+    results = []
+    for index in range(len(loader)):
+        try:
+            array = loader[index]
+            results.append({"shape": list(array.shape), "pixels": array.tobytes().hex()})
+        except OSError as error:
+            results.append({"error": type(error).__name__, "errno": error.errno})
+    return results
+
+
+def path_spelling_child(loader, paths, connection):
+    try:
+        assert loader.__reduce_ex__(4)[1][0] == tuple(paths)
+        connection.send({"pid": os.getpid(), "outcomes": path_outcomes(loader)})
+    finally:
+        connection.close()
+
+
+def path_spelling_probe(path, method):
+    previous = Path.cwd()
+    os.chdir(path.parent)
+    try:
+        paths = [str(path), str(path) + "/", "", "./" + path.name,
+                 "././" + path.name, str(path.parent) + "//" + path.name]
+        if os.name == "posix":
+            raw_name = b"raw-\xff.jpg"
+            with open(raw_name, "wb") as stream:
+                stream.write(path.read_bytes())
+            paths.append(os.fsdecode(raw_name))
+        expected = path_outcomes(imgread.Loader(paths))
+        assert expected[1]["error"] == "NotADirectoryError"
+        assert expected[2]["error"] == "FileNotFoundError"
+        for warm in (False, True):
+            loader = imgread.Loader(paths)
+            if warm:
+                loader[0]
+            for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
+                payload_paths = loader.__reduce_ex__(protocol)[1][0]
+                assert all(type(value) is str for value in payload_paths)
+                assert payload_paths == tuple(paths)
+                restored = pickle.loads(pickle.dumps(loader, protocol))
+                assert restored.__reduce_ex__(protocol)[1][0] == tuple(paths)
+                assert path_outcomes(restored) == expected
+            context = mp.get_context(method)
+            parent, child = context.Pipe()
+            process = context.Process(target=path_spelling_child, args=(loader, paths, child))
+            process.start()
+            child.close()
+            try:
+                assert parent.poll(5), "path spelling child timeout"
+                result = parent.recv()
+                assert result["pid"] == process.pid != os.getpid()
+                assert result["outcomes"] == expected
+                process.join(5)
+                assert process.exitcode == 0
+            finally:
+                parent.close()
+                terminate(process)
+        return {"method": method, "paths": paths, "outcomes": expected}
+    finally:
+        os.chdir(previous)
+
+
 def busy(call):
     try:
         call()
@@ -207,7 +271,7 @@ def constructor_no_io(root):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["process", "pickle", "overlap", "fifo", "constructor-no-io", "import-no-torch"])
+    parser.add_argument("mode", choices=["process", "pickle", "path-spelling", "overlap", "fifo", "constructor-no-io", "import-no-torch"])
     parser.add_argument("--method", choices=mp.get_all_start_methods())
     parser.add_argument("--warm", action="store_true")
     parser.add_argument("--paths-root", default="/tmp/imgread-loader-noio-sentinel")
@@ -234,6 +298,8 @@ def main():
                 result = process_probe(path, args.method, args.warm)
             elif args.mode == "pickle":
                 result = pickle_probe(path)
+            elif args.mode == "path-spelling":
+                result = path_spelling_probe(path, args.method)
             elif args.mode == "overlap":
                 result = overlap_probe(path)
             elif args.mode == "fifo":
