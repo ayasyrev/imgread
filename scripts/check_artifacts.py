@@ -13,7 +13,7 @@ import zipfile
 FORBIDDEN = {"AGENTS.md", "CLAUDE.md", "conductor", ".git", ".venv", ".pytest_cache", ".uv-cache", ".agents", ".codex", "__pycache__"}
 ATTRIBUTION = b"This software is based in part on the work of the Independent JPEG Group."
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"].replace("-beta.", "b")
+EXPECTED_VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"].replace("-beta.", "b").replace("-dev.", ".dev")
 REQUIRED_LICENSES = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/rust/THIRD_PARTY_LICENSES.txt", "licenses/libjpeg-turbo-3.1.0/LICENSE.md", "licenses/libjpeg-turbo-3.1.0/README.ijg"]
 
 
