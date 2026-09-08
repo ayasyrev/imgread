@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "study_id": "20260908_084136_loader-paths-indices",
+  "planning_base": "594e8446570449d314c144fc0167077707dd6756",
+  "runnable_roots": [".", "benchmarks/loader", "scripts/examples", "python_tests", "src", "python"],
+  "workflow_record_root": "/home/aya/Prj/PrjDocs/imgread/docs/plans",
+  "implementation_review_record_root": "/home/aya/Prj/PrjDocs/imgread/docs/plans",
+  "artifact_root": "/home/aya/Prj/PrjDocs/imgread/docs/experiments/20260908_084136_loader-paths-indices",
+  "corpus": {
+    "root": "/Data/imagenette/imagenette2-320/val",
+    "classes": 10,
+    "per_class": 100,
+    "manifest_sha256": "12a78ed6cc236c4bc3cb1829d6aa5344f0943620316dc5da4ed5153246243d1b",
+    "compressed_bytes": 25893238,
+    "min_dimension": 224
+  },
+  "environment": {
+    "python": "3.13.13", "numpy": "2.4.1", "pillow": "12.3.0", "pytest": "9.0.2",
+    "torch": "2.10.0+cpu", "torchvision": "0.25.0+cpu", "heaptrack": "1.5.0",
+    "cpus": [0, 1, 2, 3], "threads": 1
+  },
+  "variants": ["function", "path", "index"],
+  "backends": ["auto", "image"],
+  "decode": {"color": "rgb", "dtype": "uint8", "limits": "safe", "max_buffer_bytes": 1048576},
+  "pipeline": {
+    "batch_size": 32, "pin_memory": false, "drop_last": false, "crop": [224, 224],
+    "worker_profiles": [
+      {"num_workers": 0, "prefetch_factor": null, "persistent_workers": false, "multiprocessing_context": null},
+      {"num_workers": 2, "prefetch_factor": 2, "persistent_workers": true, "multiprocessing_context": "spawn"}
+    ]
+  },
+  "timing": {
+    "rounds": 5, "round_seed": 20260908, "order_seed": 37,
+    "warmup_epochs": 1, "min_epochs": 2, "min_seconds": 2,
+    "calibration_target_seconds": 3, "max_calibrations": 3
+  },
+  "manifest": {
+    "lengths": [1000, 1000000], "path_bytes": 64, "repeats": 3,
+    "workers": [0, 2], "start_methods": ["spawn", "forkserver", "fork"], "phases": 2,
+    "recipe": "manifest/{index:06d}/"
+  },
+  "sequence": {
+    "caps": [0, 1048576], "workers": [0, 2], "start_method": "spawn", "epochs": 2,
+    "phases": [["small-before", "small", 32], ["large", "large", 1], ["small-after", "small", 32], ["corrupt", "corrupt", 1], ["recovered", "small", 32], ["oversized", "oversized", 1], ["limit-recovered", "small", 32], ["progressive-large", "progressive", 1], ["progressive-recovered", "small", 32]],
+    "retained_outputs": 8,
+    "small_shape": [256, 256, 3], "large_shape": [3072, 3072, 3],
+    "seed": 37, "jpeg_quality": 95, "subsampling": 0,
+    "corruption": "replace four bytes at entropy_start+16 with FF C4 00 01"
+  },
+  "native": {
+    "backend": "auto", "cap": 1048576, "repeats": 3,
+    "checkpoints": ["small-before", "large", "small-after", "corrupt", "recovered", "progressive-large", "progressive-recovered", "destroyed"],
+    "stop_symbol": "heaptrack_stop", "stack_costs": ["leaked", "peak"]
+  },
+  "resources": {
+    "min_available_bytes": 6442450944, "min_free_bytes": 10737418240, "stop_free_bytes": 2147483648,
+    "memory_max_bytes": 8589934592, "tasks_max": 64, "attempt_seconds": 3600,
+    "max_attempts": 2, "max_active_attempts": 1, "config_seconds": 120, "native_seconds": 180,
+    "heartbeat_seconds": 10, "heartbeat_timeout_seconds": 60, "sample_seconds": 0.1,
+    "terminate_seconds": 10, "total_seconds": 7200
+  },
+  "decision": {
+    "material_slowdown": 0.05, "minimum_improvement": 0.02, "consistent_rounds": 4,
+    "retry_reasons": ["external-interruption", "profiler-infrastructure", "environment-infrastructure", "resource-exhaustion"]
+  }
+}
