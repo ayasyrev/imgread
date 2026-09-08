@@ -1,8 +1,4 @@
-use std::{
-    fs::File,
-    io::{Cursor, Read},
-    path::Path,
-};
+use std::{io::Cursor, path::Path};
 
 use image::{ColorType, DynamicImage, ImageDecoder, ImageFormat, ImageReader, RgbImage};
 
@@ -50,50 +46,60 @@ pub struct DecodeOutput {
 }
 
 pub fn read_image_bytes(path: &Path, limits: DecodeLimits) -> Result<Vec<u8>, ImgReadError> {
-    let io_error = |source| ImgReadError::Io {
-        path: path.to_path_buf(),
-        source,
-    };
-    let mut file = File::open(path).map_err(io_error)?;
-    // Metadata comes from the same open descriptor. Reads remain bounded if the file grows.
-    let metadata = file.metadata().map_err(io_error)?;
-    limits.check_input(metadata.len())?;
-    let mut bytes = Vec::new();
-    if metadata.is_file() {
-        let size = limits.check_input(metadata.len())?;
-        bytes
-            .try_reserve_exact(size)
-            .map_err(|e| ImgReadError::LimitExceeded(format!("input allocation failed: {e}")))?;
-    }
-    let mut chunk = [0_u8; 64 * 1024];
-    loop {
-        // Read at most one byte over the input cap, including special/unknown-size files.
-        let remaining = limits.max_input_bytes.map_or(chunk.len(), |cap| {
-            usize::try_from(
-                cap.saturating_sub(u64::try_from(bytes.len()).unwrap_or(u64::MAX))
-                    .saturating_add(1),
-            )
-            .unwrap_or(chunk.len())
-            .min(chunk.len())
-        });
-        let count = match file.read(&mut chunk[..remaining]) {
-            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
-            result => result.map_err(io_error)?,
-        };
-        if count == 0 {
-            break;
+    crate::input_buffer::ReusableInput::new(0)
+        .read(path, limits)
+        .map(|input| input.into_vec())
+}
+
+pub(crate) struct DecoderWorkspace {
+    pub(crate) input: crate::input_buffer::ReusableInput,
+    native: NativeWorkspace,
+}
+
+#[derive(Default)]
+struct NativeWorkspace {
+    #[cfg(feature = "turbojpeg")]
+    slot: crate::turbo_backend::NativeSlot,
+    #[cfg(feature = "turbojpeg")]
+    reuse: bool,
+}
+
+impl DecoderWorkspace {
+    #[cfg(feature = "loader-diagnostics")]
+    pub(crate) fn native_counts(&self) -> (usize, usize) {
+        #[cfg(feature = "turbojpeg")]
+        {
+            (self.native.slot.creations, self.native.slot.live())
         }
-        let size = bytes
-            .len()
-            .checked_add(count)
-            .ok_or_else(arithmetic_limit)?;
-        limits.check_input(u64::try_from(size).map_err(|_| arithmetic_limit())?)?;
-        bytes
-            .try_reserve_exact(count)
-            .map_err(|e| ImgReadError::LimitExceeded(format!("input allocation failed: {e}")))?;
-        bytes.extend_from_slice(&chunk[..count]);
+        #[cfg(not(feature = "turbojpeg"))]
+        {
+            (0, 0)
+        }
     }
-    Ok(bytes)
+
+    pub(crate) fn new(cap: usize, _reuse_native: bool) -> Self {
+        Self {
+            input: crate::input_buffer::ReusableInput::new(cap),
+            native: NativeWorkspace {
+                #[cfg(feature = "turbojpeg")]
+                reuse: _reuse_native,
+                ..NativeWorkspace::default()
+            },
+        }
+    }
+
+    pub(crate) fn decode_path(
+        &mut self,
+        path: &Path,
+        backend: DecodeBackend,
+        bgr: bool,
+        simple: bool,
+        limits: DecodeLimits,
+    ) -> Result<DecodeOutput, ImgReadError> {
+        let bytes = self.input.read(path, limits)?;
+        self.native
+            .decode_bytes(&bytes, Some(path), backend, bgr, simple, limits)
+    }
 }
 
 fn detect_format(bytes: &[u8], path: Option<&Path>) -> Result<ImageFormat, ImgReadError> {
@@ -208,62 +214,77 @@ pub fn decode_bytes(
     simple: bool,
     limits: DecodeLimits,
 ) -> Result<DecodeOutput, ImgReadError> {
-    limits.check_input(u64::try_from(bytes.len()).map_err(|_| arithmetic_limit())?)?;
-    if simple && !bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
-        return Err(ImgReadError::UnsupportedFormat(
-            "simple JPEG API only supports JPEG input".into(),
-        ));
-    }
-    let format = detect_format(bytes, path)?;
-    let backend = if simple {
-        DecodeBackend::TurboJpeg
-    } else {
-        backend
-    };
-    let mut fallback = None;
-    if backend != DecodeBackend::Image {
-        if format == ImageFormat::Jpeg {
-            #[cfg(feature = "turbojpeg")]
-            match crate::turbo_backend::decode(bytes, bgr, limits) {
-                Ok(image) => {
-                    return Ok(DecodeOutput {
-                        image,
-                        fallback_warning: None,
-                        is_bgr: bgr,
-                    })
-                }
-                Err(err @ ImgReadError::LimitExceeded(_)) => return Err(err),
-                Err(err) => {
-                    fallback = Some(format!(
-                        "turbojpeg decode failed: {err}; fell back to 'image'"
-                    ))
-                }
-            }
-            #[cfg(not(feature = "turbojpeg"))]
-            if backend == DecodeBackend::TurboJpeg {
-                fallback = Some(
-                    "backend 'turbojpeg' is not enabled in this build; fell back to 'image'".into(),
-                );
-            }
-        } else if backend == DecodeBackend::TurboJpeg {
-            fallback = Some(format!(
-                "backend 'turbojpeg' only supports JPEG, got {format:?}; fell back to 'image'"
+    NativeWorkspace::default().decode_bytes(bytes, path, backend, bgr, simple, limits)
+}
+
+impl NativeWorkspace {
+    fn decode_bytes(
+        &mut self,
+        bytes: &[u8],
+        path: Option<&Path>,
+        backend: DecodeBackend,
+        bgr: bool,
+        simple: bool,
+        limits: DecodeLimits,
+    ) -> Result<DecodeOutput, ImgReadError> {
+        limits.check_input(u64::try_from(bytes.len()).map_err(|_| arithmetic_limit())?)?;
+        if simple && !bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+            return Err(ImgReadError::UnsupportedFormat(
+                "simple JPEG API only supports JPEG input".into(),
             ));
         }
-    }
-    let mut image = decode_with_image(bytes, format, limits)?;
-    if bgr {
-        if let Some(rgb) = image.as_mut_rgb8() {
-            for pixel in rgb.as_mut().as_chunks_mut::<3>().0 {
-                pixel.swap(0, 2);
+        let format = detect_format(bytes, path)?;
+        let backend = if simple {
+            DecodeBackend::TurboJpeg
+        } else {
+            backend
+        };
+        let mut fallback = None;
+        if backend != DecodeBackend::Image {
+            if format == ImageFormat::Jpeg {
+                #[cfg(feature = "turbojpeg")]
+                match self.slot.decode(bytes, bgr, limits, self.reuse) {
+                    Ok(image) => {
+                        return Ok(DecodeOutput {
+                            image,
+                            fallback_warning: None,
+                            is_bgr: bgr,
+                        })
+                    }
+                    Err(err @ ImgReadError::LimitExceeded(_)) => return Err(err),
+                    Err(err) => {
+                        fallback = Some(format!(
+                            "turbojpeg decode failed: {err}; fell back to 'image'"
+                        ))
+                    }
+                }
+                #[cfg(not(feature = "turbojpeg"))]
+                if backend == DecodeBackend::TurboJpeg {
+                    fallback = Some(
+                        "backend 'turbojpeg' is not enabled in this build; fell back to 'image'"
+                            .into(),
+                    );
+                }
+            } else if backend == DecodeBackend::TurboJpeg {
+                fallback = Some(format!(
+                    "backend 'turbojpeg' only supports JPEG, got {format:?}; fell back to 'image'"
+                ));
             }
         }
+        let mut image = decode_with_image(bytes, format, limits)?;
+        if bgr {
+            if let Some(rgb) = image.as_mut_rgb8() {
+                for pixel in rgb.as_mut().as_chunks_mut::<3>().0 {
+                    pixel.swap(0, 2);
+                }
+            }
+        }
+        Ok(DecodeOutput {
+            image,
+            fallback_warning: fallback.map(|message| DecodeFallbackWarning { message }),
+            is_bgr: bgr,
+        })
     }
-    Ok(DecodeOutput {
-        image,
-        fallback_warning: fallback.map(|message| DecodeFallbackWarning { message }),
-        is_bgr: bgr,
-    })
 }
 
 pub fn decode_path(
@@ -273,8 +294,7 @@ pub fn decode_path(
     simple: bool,
     limits: DecodeLimits,
 ) -> Result<DecodeOutput, ImgReadError> {
-    let bytes = read_image_bytes(path, limits)?;
-    decode_bytes(&bytes, Some(path), backend, bgr, simple, limits)
+    DecoderWorkspace::new(0, false).decode_path(path, backend, bgr, simple, limits)
 }
 
 // The unpublished Rust API keeps its convenience entry points, all safe by default.

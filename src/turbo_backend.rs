@@ -8,7 +8,12 @@ use crate::{
 use std::{ffi::CStr, ptr::NonNull};
 use turbojpeg::raw;
 
-struct Decompressor(NonNull<std::ffi::c_void>);
+pub(crate) struct Decompressor(NonNull<std::ffi::c_void>);
+
+// SAFETY: the handle and all native state are exclusively owned. Moving it
+// between threads is safe; all access is behind Loader's admission gate/mutex.
+// No input/output pointer escapes a synchronous decode. The handle is not Sync.
+unsafe impl Send for Decompressor {}
 
 fn is_resource_failure(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
@@ -76,71 +81,130 @@ impl Drop for Decompressor {
     }
 }
 
-pub(crate) fn decode(
+impl Decompressor {
+    pub(crate) fn decode(
+        &mut self,
+        bytes: &[u8],
+        bgr: bool,
+        limits: DecodeLimits,
+    ) -> Result<image::DynamicImage, ImgReadError> {
+        if let Some(budget) = limits.max_decoder_alloc {
+            let megabytes =
+                i32::try_from(budget / (1024 * 1024)).map_err(|_| arithmetic_limit())?;
+            if megabytes == 0 {
+                return Err(ImgReadError::LimitExceeded(
+                    "TurboJPEG memory budget is below 1 MiB".into(),
+                ));
+            }
+            self.set(raw::TJPARAM_TJPARAM_MAXMEMORY, megabytes)?;
+        } else {
+            self.set(raw::TJPARAM_TJPARAM_MAXMEMORY, 0)?;
+        }
+        // Do not save ICC/EXIF markers; metadata does not form part of the pixel contract.
+        self.set(raw::TJPARAM_TJPARAM_SAVEMARKERS, 0)?;
+        let input_len = bytes.len().try_into().map_err(|_| arithmetic_limit())?;
+        // SAFETY: immutable input slice stays alive for the entire call; length matches it.
+        if unsafe { raw::tj3DecompressHeader(self.0.as_ptr(), bytes.as_ptr(), input_len) } != 0 {
+            return Err(self.error());
+        }
+        let width = self.get(raw::TJPARAM_TJPARAM_JPEGWIDTH)?;
+        let height = self.get(raw::TJPARAM_TJPARAM_JPEGHEIGHT)?;
+        let size = limits.check_dimensions(u64::from(width), u64::from(height))?;
+        let pitch = i32::try_from(width.checked_mul(3).ok_or_else(arithmetic_limit)?)
+            .map_err(|_| arithmetic_limit())?;
+        if width == 0 || height == 0 {
+            return Err(ImgReadError::Decode("empty JPEG dimensions".into()));
+        }
+        let mut pixels = Vec::new();
+        pixels
+            .try_reserve_exact(size)
+            .map_err(|e| ImgReadError::LimitExceeded(format!("allocation failed: {e}")))?;
+        let output = pixels.spare_capacity_mut()[..size]
+            .as_mut_ptr()
+            .cast::<u8>();
+        let format = if bgr {
+            raw::TJPF_TJPF_BGR
+        } else {
+            raw::TJPF_TJPF_RGB
+        };
+        // SAFETY: header and decode use the same immutable input and the same unscaled
+        // handle. `output` points to `size` writable bytes in the spare capacity of
+        // `pixels`; pitch is width * 3, and RGB/BGR write every byte in that region.
+        // No pointers escape. The vector length remains zero unless decoding succeeds.
+        if unsafe {
+            raw::tj3Decompress8(
+                self.0.as_ptr(),
+                bytes.as_ptr(),
+                input_len,
+                output,
+                pitch,
+                format,
+            )
+        } != 0
+        {
+            return Err(self.error());
+        }
+        // SAFETY: a successful full-image tj3Decompress8 call initialized all `size`
+        // bytes described above. The allocation has capacity for at least that region.
+        unsafe {
+            pixels.set_len(size);
+        }
+        rgb_image(width, height, pixels)
+    }
+}
+
+/// Keeps only successful, table-independent decoder state.
+#[derive(Default)]
+pub(crate) struct NativeSlot {
+    decoder: Option<Decompressor>,
+    #[cfg(any(test, feature = "loader-diagnostics"))]
+    pub(crate) creations: usize,
+}
+impl NativeSlot {
+    pub(crate) fn decode(
+        &mut self,
+        bytes: &[u8],
+        bgr: bool,
+        limits: DecodeLimits,
+        reuse: bool,
+    ) -> Result<image::DynamicImage, ImgReadError> {
+        let certified = reuse && crate::jpeg_reuse::is_self_contained(bytes);
+        // Uncertified inputs must never see tables left by an earlier image.
+        // Drop retained state first, keeping at most one native allocation alive.
+        if !certified {
+            self.decoder = None;
+        }
+        if self.decoder.is_none() {
+            self.decoder = Some(Decompressor::new()?);
+            #[cfg(any(test, feature = "loader-diagnostics"))]
+            {
+                self.creations += 1;
+            }
+        }
+        let result = self
+            .decoder
+            .as_mut()
+            .expect("initialized decoder")
+            .decode(bytes, bgr, limits);
+        if result.is_err() || !certified {
+            self.decoder = None;
+        }
+        result
+    }
+
+    #[cfg(any(test, feature = "loader-diagnostics"))]
+    pub(crate) fn live(&self) -> usize {
+        usize::from(self.decoder.is_some())
+    }
+}
+
+#[cfg(test)]
+fn decode(
     bytes: &[u8],
     bgr: bool,
     limits: DecodeLimits,
 ) -> Result<image::DynamicImage, ImgReadError> {
-    let mut decoder = Decompressor::new()?;
-    if let Some(budget) = limits.max_decoder_alloc {
-        let megabytes = i32::try_from(budget / (1024 * 1024)).map_err(|_| arithmetic_limit())?;
-        if megabytes == 0 {
-            return Err(ImgReadError::LimitExceeded(
-                "TurboJPEG memory budget is below 1 MiB".into(),
-            ));
-        }
-        decoder.set(raw::TJPARAM_TJPARAM_MAXMEMORY, megabytes)?;
-    }
-    // Do not save ICC/EXIF markers; metadata does not form part of the pixel contract.
-    decoder.set(raw::TJPARAM_TJPARAM_SAVEMARKERS, 0)?;
-    let input_len = bytes.len().try_into().map_err(|_| arithmetic_limit())?;
-    // SAFETY: immutable input slice stays alive for the entire call; length matches it.
-    if unsafe { raw::tj3DecompressHeader(decoder.0.as_ptr(), bytes.as_ptr(), input_len) } != 0 {
-        return Err(decoder.error());
-    }
-    let width = decoder.get(raw::TJPARAM_TJPARAM_JPEGWIDTH)?;
-    let height = decoder.get(raw::TJPARAM_TJPARAM_JPEGHEIGHT)?;
-    let size = limits.check_dimensions(u64::from(width), u64::from(height))?;
-    let pitch = i32::try_from(width.checked_mul(3).ok_or_else(arithmetic_limit)?)
-        .map_err(|_| arithmetic_limit())?;
-    if width == 0 || height == 0 {
-        return Err(ImgReadError::Decode("empty JPEG dimensions".into()));
-    }
-    let mut pixels = Vec::new();
-    pixels
-        .try_reserve_exact(size)
-        .map_err(|e| ImgReadError::LimitExceeded(format!("allocation failed: {e}")))?;
-    let output = pixels.spare_capacity_mut()[..size]
-        .as_mut_ptr()
-        .cast::<u8>();
-    let format = if bgr {
-        raw::TJPF_TJPF_BGR
-    } else {
-        raw::TJPF_TJPF_RGB
-    };
-    // SAFETY: header and decode use the same immutable input and the same unscaled
-    // handle. `output` points to `size` writable bytes in the spare capacity of
-    // `pixels`; pitch is width * 3, and RGB/BGR write every byte in that region.
-    // No pointers escape. The vector length remains zero unless decoding succeeds.
-    if unsafe {
-        raw::tj3Decompress8(
-            decoder.0.as_ptr(),
-            bytes.as_ptr(),
-            input_len,
-            output,
-            pitch,
-            format,
-        )
-    } != 0
-    {
-        return Err(decoder.error());
-    }
-    // SAFETY: a successful full-image tj3Decompress8 call initialized all `size`
-    // bytes described above. The allocation has capacity for at least that region.
-    unsafe {
-        pixels.set_len(size);
-    }
-    rgb_image(width, height, pixels)
+    NativeSlot::default().decode(bytes, bgr, limits, false)
 }
 
 #[cfg(test)]
@@ -149,6 +213,66 @@ mod tests {
     use crate::{error::ImgReadError, limits::DecodeLimits};
     use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
     use std::io::Cursor;
+
+    #[test]
+    fn native_identity_limits_and_fresh_table_independence() {
+        let mut encoded = Cursor::new(Vec::new());
+        DynamicImage::ImageRgb8(RgbImage::new(16, 16))
+            .write_to(&mut encoded, ImageFormat::Jpeg)
+            .unwrap();
+        let bytes = encoded.into_inner();
+        let mut slot = super::NativeSlot::default();
+        for bgr in [false, true, false] {
+            assert_eq!(
+                slot.decode(&bytes, bgr, DecodeLimits::SAFE, true)
+                    .unwrap()
+                    .as_bytes(),
+                decode(&bytes, bgr, DecodeLimits::SAFE).unwrap().as_bytes()
+            );
+            assert_eq!(slot.creations, 1);
+            assert_eq!(slot.live(), 1);
+        }
+        let limits = DecodeLimits {
+            max_width: Some(1),
+            ..DecodeLimits::SAFE
+        };
+        assert!(matches!(
+            slot.decode(&bytes, false, limits, true),
+            Err(ImgReadError::LimitExceeded(_))
+        ));
+        assert_eq!(slot.live(), 0);
+        slot.decode(&bytes, false, DecodeLimits::UNLIMITED, true)
+            .unwrap();
+        assert_eq!(slot.creations, 2);
+        for marker in [0xdb, 0xc4] {
+            let mut missing = bytes.clone();
+            let at = missing
+                .windows(2)
+                .position(|value| value == [0xff, marker])
+                .unwrap();
+            let length = usize::from(u16::from_be_bytes([missing[at + 2], missing[at + 3]]));
+            missing.drain(at..at + 2 + length);
+            let fresh = decode(&missing, false, DecodeLimits::SAFE)
+                .map(|image| image.into_bytes())
+                .map_err(|e| e.to_string());
+            let reused = slot
+                .decode(&missing, false, DecodeLimits::SAFE, true)
+                .map(|image| image.into_bytes())
+                .map_err(|e| e.to_string());
+            assert_eq!(fresh, reused);
+            assert_eq!(slot.live(), 0);
+            slot.decode(&bytes, false, DecodeLimits::SAFE, true)
+                .unwrap();
+        }
+        // Reset MAXMEMORY when switching from bounded to unlimited internally.
+        let mut decoder = Decompressor::new().unwrap();
+        decoder.decode(&bytes, false, DecodeLimits::SAFE).unwrap();
+        assert_eq!(decoder.get(raw::TJPARAM_TJPARAM_MAXMEMORY).unwrap(), 512);
+        decoder
+            .decode(&bytes, false, DecodeLimits::UNLIMITED)
+            .unwrap();
+        assert_eq!(decoder.get(raw::TJPARAM_TJPARAM_MAXMEMORY).unwrap(), 0);
+    }
 
     #[test]
     fn only_allocation_and_maxmemory_errors_are_resource_failures() {

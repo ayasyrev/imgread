@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.88"
 publish = false
 include = [
-    "/src/**", "/Cargo.toml", "/Cargo.lock", "/pyproject.toml", "/uv.lock", "/python/**",
+    "/build.rs", "/src/**", "/Cargo.toml", "/Cargo.lock", "/pyproject.toml", "/uv.lock", "/python/**",
     "/README.md", "/LICENSE", "/THIRD_PARTY_NOTICES.md", "/licenses/**",
     "/tests/**", "/python_tests/**", "/scripts/**", "/about.toml", "/about.hbs", "/deny.toml",
 ]
@@ -17,6 +17,7 @@ homepage = "https://github.com/ayasyrev/imgread"
 
 [features]
 default = []
+loader-diagnostics = []
 extension-module = ["pyo3/extension-module"]
 turbojpeg = ["dep:turbojpeg"]
 
