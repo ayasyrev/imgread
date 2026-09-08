@@ -256,6 +256,19 @@ def memory_evidence(config, rows, run_dir):
             "output_nbytes_max": max(row.get("output_nbytes", 0) for row in rows)}
 
 
+def memory_admission(config, provenance):
+    admission = provenance["resource_preflight"]
+    required = config["resources"]["min_available_bytes"]
+    if (admission["required_bytes"] != required
+            or admission["allow_low_memory"] is not provenance["binding"].get("allow_low_memory", False)
+            or admission["threshold_met"] is not (admission["available_bytes"] >= required)
+            or (not admission["threshold_met"] and not admission["allow_low_memory"])):
+        raise ValueError("memory admission provenance mismatch")
+    if admission["allow_low_memory"]:
+        return [f"Owner-authorized low-memory run: preflight observed {admission['available_bytes'] / 2**30:.3f} GiB available RAM; the default admission threshold is {required / 2**30:.0f} GiB. The threshold was waived for this attempt. Results require confirmation on another machine with sufficient memory; the measurement matrix and other resource limits are unchanged."]
+    return []
+
+
 def generate(config, run_dir, check_complete=True):
     run_dir = Path(run_dir).resolve()
     provenance = json.loads((run_dir / "provenance.json").read_text())
@@ -270,6 +283,7 @@ def generate(config, run_dir, check_complete=True):
         verify_stage(stages[stage], run_dir, provenance["binding"])
     if canonical(json.loads((run_dir / "study.json").read_text())) != canonical(config):
         raise ValueError("saved config differs from reviewed config")
+    limitations = memory_admission(config, provenance)
     corpus.select(config["corpus"])
     validation = json.loads((run_dir / "validation.json").read_text())
     if validation["binding"] != provenance["binding"]:
@@ -292,10 +306,11 @@ def generate(config, run_dir, check_complete=True):
     native = native_evidence(config, run_dir)
     regressions = [name for name, effect in timing["effects"].items() if effect["material_regression"]]
     summary = {"complete": True, "binding": provenance["binding"], "timing": timing, "memory": memory, "native": native,
+               "resource_preflight": provenance["resource_preflight"], "execution_limitations": limitations,
                "decision": "return-to-owner-material-regression" if regressions else "completed", "regressions": regressions}
     atomic_json(run_dir / "summary.json", summary)
     lines = ["# Loader paths/indices study", "", f"Code SHA: `{provenance['code_sha']}`. Five paired rounds per cell; same corpus, output digests and build.",
-             "", f"Decision: **{summary['decision']}**.", "", "## Warmed time and preparation", "",
+             "", f"Decision: **{summary['decision']}**.", "", *limitations, "", "## Warmed time and preparation", "",
              "| Configuration | ns/image median [min, max] | IQR | images/s | startup ns median | list preparation ns median |",
              "|---|---:|---:|---:|---:|---:|"]
     for name, cell in timing["configurations"].items():

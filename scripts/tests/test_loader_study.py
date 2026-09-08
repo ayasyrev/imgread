@@ -495,3 +495,56 @@ def test_validation_digest_compares_worker_profiles(config):
             validation['cells'][cell['config_id']]['result_digest'] = 'different-worker-result'
     with pytest.raises(ValueError, match='digests differ'):
         run.check_validation_digests(config, validation['cells'])
+
+
+def test_low_memory_admission_is_explicit_and_preserves_other_checks(config, tmp_path, monkeypatch):
+    original = copy.deepcopy(config)
+    monkeypatch.setattr(run, "available_memory", lambda: 4 * 2**30)
+    monkeypatch.setattr(run.os, "sched_getaffinity", lambda _pid: {0, 1, 2, 3})
+    monkeypatch.setattr(run.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(run.shutil, "disk_usage", lambda _path: types.SimpleNamespace(free=20 * 2**30))
+    monkeypatch.setattr(run.subprocess, "check_output", lambda *_args, **_kwargs: "1.5.0")
+    monkeypatch.setattr(run.subprocess, "run", lambda *_args, **_kwargs: None)
+    with pytest.raises(OSError, match="6 GiB"):
+        run.resource_preflight(config, tmp_path)
+    observed = run.resource_preflight(config, tmp_path, allow_low_memory=True)
+    assert observed == {"available_bytes": 4 * 2**30, "required_bytes": 6 * 2**30,
+                        "threshold_met": False, "allow_low_memory": True}
+    assert config == original
+    monkeypatch.setattr(run.shutil, "disk_usage", lambda _path: types.SimpleNamespace(free=2 * 2**30))
+    with pytest.raises(OSError, match="free output storage"):
+        run.resource_preflight(config, tmp_path, allow_low_memory=True)
+
+
+def test_report_labels_and_validates_memory_admission(config):
+    provenance = {"binding": {"allow_low_memory": True},
+                  "resource_preflight": {"available_bytes": 4 * 2**30, "required_bytes": 6 * 2**30,
+                                         "threshold_met": False, "allow_low_memory": True}}
+    text = " ".join(report.memory_admission(config, provenance))
+    assert "4.000 GiB" in text and "another machine" in text
+    changed = copy.deepcopy(provenance)
+    changed["binding"].clear()
+    with pytest.raises(ValueError, match="memory admission"):
+        report.memory_admission(config, changed)
+    changed["resource_preflight"]["allow_low_memory"] = False
+    with pytest.raises(ValueError, match="memory admission"):
+        report.memory_admission(config, changed)
+    changed["resource_preflight"].update(available_bytes=7 * 2**30, threshold_met=True)
+    assert report.memory_admission(config, changed) == []
+
+
+@pytest.mark.parametrize("allowed", [False, True])
+def test_memory_admission_policy_cannot_change_on_resume(config, tmp_path, monkeypatch, allowed):
+    settings = copy.deepcopy(config)
+    settings["workflow_record_root"] = str(tmp_path)
+    run_dir, control = tmp_path / "attempt-01", tmp_path / "control"
+    monkeypatch.setattr(run, "code_identity", lambda _config: {"code_sha": "reviewed-sha"})
+    monkeypatch.setattr(run, "run_paths", lambda *_args: (run_dir, control))
+    monkeypatch.setattr(run, "wheels", lambda *_args: {name: {"sha256": name} for name in ("normal", "diagnostic")})
+    monkeypatch.setattr(run.corpus, "select", lambda *_args: ([], b""))
+    monkeypatch.setattr(run, "run_stage", lambda *_args: None)
+    run.supervise(settings, run_dir, "preflight", allow_low_memory=allowed)
+    before = (run_dir / "provenance.json").read_bytes()
+    with pytest.raises(ValueError, match="attempt provenance changed"):
+        run.supervise(settings, run_dir, "preflight", allow_low_memory=not allowed)
+    assert (run_dir / "provenance.json").read_bytes() == before

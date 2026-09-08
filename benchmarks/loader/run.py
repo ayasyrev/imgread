@@ -156,12 +156,14 @@ def available_memory():
     raise RuntimeError("MemAvailable unavailable")
 
 
-def resource_preflight(config, run_dir):
+def resource_preflight(config, run_dir, allow_low_memory=False):
     if sys.platform != "linux" or platform.machine() != "x86_64":
         raise ValueError("the frozen study requires Linux x86_64")
     if not set(config["environment"]["cpus"]).issubset(os.sched_getaffinity(0)):
         raise ValueError("CPUs 0-3 unavailable")
-    if available_memory() < config["resources"]["min_available_bytes"]:
+    observed_memory = available_memory()
+    required_memory = config["resources"]["min_available_bytes"]
+    if observed_memory < required_memory and not allow_low_memory:
         raise OSError("study requires at least 6 GiB MemAvailable")
     if shutil.disk_usage(run_dir).free < config["resources"]["min_free_bytes"]:
         raise OSError("study requires at least 10 GiB free output storage")
@@ -173,6 +175,8 @@ def resource_preflight(config, run_dir):
         if not re.search(r"\b1\.5\.0\b", version):
             raise ValueError(f"{executable} must be 1.5.0")
     subprocess.run(["systemctl", "--user", "show-environment"], check=True, stdout=subprocess.DEVNULL)
+    return {"available_bytes": observed_memory, "required_bytes": required_memory,
+            "threshold_met": observed_memory >= required_memory, "allow_low_memory": allow_low_memory}
 
 
 def wheels(identity):
@@ -935,7 +939,8 @@ def check_retry(config, control, run_dir):
 
 def run_stage(stage, config, run_dir, provenance, heartbeat):
     if stage == "preflight":
-        resource_preflight(config, run_dir)
+        provenance["resource_preflight"] = resource_preflight(config, run_dir, provenance["binding"].get("allow_low_memory", False))
+        atomic_json(run_dir / "provenance.json", provenance)
         samples, manifest = corpus.select(config["corpus"])
         from PIL import Image
         for path, _ in samples:
@@ -1008,7 +1013,7 @@ class Tee:
         self.file.flush()
 
 
-def supervise(config, run_dir, selected_stage):
+def supervise(config, run_dir, selected_stage, allow_low_memory=False):
     identity = code_identity(config)
     run_dir, control = run_paths(config, run_dir, identity["code_sha"])
     run_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -1021,6 +1026,8 @@ def supervise(config, run_dir, selected_stage):
             service_envelope(config, identity["code_sha"], run_dir.name)
         wheel_info = wheels(identity)
         binding = dict(identity, wheels={name: row["sha256"] for name, row in wheel_info.items()}, corpus_sha256=config["corpus"]["manifest_sha256"])
+        if allow_low_memory:
+            binding["allow_low_memory"] = True
         provenance_path = run_dir / "provenance.json"
         if provenance_path.exists():
             provenance = json.loads(provenance_path.read_text())
@@ -1107,6 +1114,7 @@ def main():
     parser.add_argument("--config", type=Path, default=ROOT / "benchmarks/loader/study.json")
     parser.add_argument("--run-dir", type=Path)
     parser.add_argument("--stage", choices=(*STAGES, "all"), default="preflight")
+    parser.add_argument("--allow-low-memory", action="store_true", help="owner-authorized exception to the 6 GiB admission threshold; recorded for this attempt")
     parser.add_argument("--self-check", action="store_true", help="validate frozen settings without measurements")
     parser.add_argument("--worker-request", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -1129,7 +1137,7 @@ def main():
         with (run_dir / "stdout.log").open("a") as out, (run_dir / "stderr.log").open("a") as err:
             with contextlib.redirect_stdout(Tee(sys.stdout, out)), contextlib.redirect_stderr(Tee(sys.stderr, err)):
                 try:
-                    supervise(config, run_dir, args.stage)
+                    supervise(config, run_dir, args.stage, args.allow_low_memory)
                 except BaseException:
                     traceback.print_exc()
                     raise SystemExit(1)

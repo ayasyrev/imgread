@@ -54,6 +54,14 @@ output storage. Profiler provisioning is external; this harness does not install
 system packages. It stops below 2 GiB free storage or after its attempt budget.
 No network, GPU, uploads or writes to original image data are part of a study.
 
+An owner-authorized run on a memory-constrained host may add `--allow-low-memory`
+to **both** the preflight and full supervisor commands. Save the owner's decision
+in the external launch record. This waives only the 6 GiB admission check for that
+attempt; the frozen matrix, correctness checks, cgroup and time limits stay intact.
+The flag is part of the attempt binding, so it cannot change when resuming stages.
+Provenance records actual available memory; the report labels the exception and
+requires confirmation on another machine. The default remains strict.
+
 ## Stages and evidence
 
 The DAG is `preflight → validate → timing → memory → native → report`. `--stage`
