@@ -400,12 +400,19 @@ def zero_state(loader):
     return loader._debug_state() if loader is not None else {"pid": os.getpid(), "input_len": 0, "input_capacity": 0, "native_live": 0, "native_creations": 0, "manifest_bytes": 0, "manifest_entries": 0}
 
 
-def manifest_child(paths, loader, connection):
+def manifest_receive(connection, deadline, message):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0 or not connection.poll(remaining):
+        raise TimeoutError(message)
+    return connection.recv()
+
+
+def manifest_child(paths, loader, connection, deadline):
     try:
         connection.send({"ready": os.getpid(), "state": zero_state(loader)})
         for phase in range(2):
-            if not connection.poll(5) or connection.recv() != phase:
-                raise TimeoutError("manifest phase handshake")
+            if manifest_receive(connection, deadline, "manifest phase handshake") != phase:
+                raise ValueError("manifest phase sequence changed")
             connection.send(dict(memory_snapshot(os.getpid()), diagnostics=zero_state(loader), phase=phase, retained_python_paths=len(paths)))
     finally:
         connection.close()
@@ -415,6 +422,10 @@ def manifest_job(config, job):
     import gc
     import imgread
     import pickle
+    # The first ready child must survive the other child's spawn/unpickle cost.
+    # All startup and phase waits share this deadline; the outer process group
+    # additionally enforces config_seconds from before worker interpreter startup.
+    deadline = time.monotonic() + config["resources"]["config_seconds"]
     start = time.perf_counter_ns()
     paths = corpus.manifest_paths(job["length"])
     list_ns = time.perf_counter_ns() - start
@@ -434,26 +445,24 @@ def manifest_job(config, job):
             ctx = mp.get_context(job["method"])
             for _ in range(2):
                 parent, child = ctx.Pipe()
-                process = ctx.Process(target=manifest_child, args=(paths, loader, child))
+                process = ctx.Process(target=manifest_child, args=(paths, loader, child, deadline))
                 processes.append(process)
                 pipes.append(parent)
                 process.start()
                 child.close()
             for pipe in pipes:
-                if not pipe.poll(5):
-                    raise TimeoutError("manifest worker startup")
-                pipe.recv()
+                manifest_receive(pipe, deadline, "manifest worker startup")
         startup_ns = time.perf_counter_ns() - start
         for phase in range(2):
             for pipe in pipes:
                 pipe.send(phase)
             for pipe in pipes:
-                if not pipe.poll(5):
-                    raise TimeoutError("manifest worker phase")
-                rows.append(dict(pipe.recv(), role="worker"))
+                rows.append(dict(manifest_receive(pipe, deadline, "manifest worker phase"), role="worker"))
             rows.append(dict(memory_snapshot(os.getpid()), phase=phase, role="parent", diagnostics=zero_state(loader), retained_python_paths=len(paths)))
         return {"rows": rows, "list_ns": list_ns, "construction_ns": construct_ns, "pickle_bytes": payload_size, "pickle_ns": pickle_ns, "startup_ns": startup_ns}
     finally:
+        pending_error = sys.exc_info()[0] is not None
+        failures = []
         for pipe in pipes:
             pipe.close()
         for process in processes:
@@ -466,7 +475,9 @@ def manifest_job(config, job):
                     process.kill()
                     process.join(5)
                 if process.exitcode != 0:
-                    raise RuntimeError(f"manifest worker failed: {process.exitcode}")
+                    failures.append(process.exitcode)
+        if failures and not pending_error:
+            raise RuntimeError(f"manifest workers failed: {failures}")
 
 
 def checked_image(loader, path, kind):

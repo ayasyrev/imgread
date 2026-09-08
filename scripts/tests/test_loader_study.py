@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
+import types
 
 import pytest
 
@@ -215,6 +217,72 @@ def test_pipeline_and_memory_factory_smoke(config, tmp_path):
                 continue
             result = run.manifest_job(config, {"length": 10, "variant": variant, "workers": 2, "method": method})
             assert len(result["rows"]) == 6
+
+
+def test_manifest_first_worker_survives_slow_sibling_start(config, monkeypatch):
+    """A ready worker must wait while its sibling is being spawned/unpickled."""
+    pytest.importorskip("imgread")
+    context = run.mp.get_context("spawn")
+    parents = []
+    def pipe():
+        parent, child = context.Pipe()
+        parents.append(parent)
+        return parent, child
+    def process(*args, **kwargs):
+        child = context.Process(*args, **kwargs)
+        original_start = child.start
+        if len(parents) == 2:
+            def slow_start():
+                assert parents[0].poll(20), "first worker did not become ready"
+                time.sleep(5.2)
+                del child.start  # The actual process object must remain pickleable.
+                original_start()
+            child.start = slow_start
+        return child
+    monkeypatch.setattr(run.mp, "get_context", lambda _method: types.SimpleNamespace(Pipe=pipe, Process=process))
+    result = run.manifest_job(config, {"length": 2, "variant": "function", "workers": 2, "method": "spawn"})
+    workers = [row for row in result["rows"] if row["role"] == "worker"]
+    assert len(workers) == 4
+    assert len({row["pid"] for row in workers}) == 2
+    assert {row["phase"] for row in workers} == {0, 1}
+
+
+def test_manifest_phase_waits_do_not_reset_deadline(monkeypatch):
+    clock = [100.0]
+    waits = []
+    class Connection:
+        def poll(self, timeout):
+            waits.append(timeout)
+            clock[0] += 7
+            return True
+        def recv(self):
+            return "ready"
+    monkeypatch.setattr(run.time, "monotonic", lambda: clock[0])
+    connection = Connection()
+    assert run.manifest_receive(connection, 112, "phase") == "ready"
+    assert run.manifest_receive(connection, 112, "phase") == "ready"
+    with pytest.raises(TimeoutError, match="phase"):
+        run.manifest_receive(connection, 112, "phase")
+    assert waits == [12.0, 5.0]
+
+
+@pytest.mark.skipif(os.environ.get("IMGREAD_REQUIRE_LARGE_MANIFEST") != "1", reason="explicit million-entry spawn regression")
+def test_million_entry_index_manifest_spawn(config):
+    import imgread
+    if not hasattr(imgread.Loader, "_debug_state"):
+        pytest.fail("large manifest regression requires a diagnostic wheel")
+    previous_affinity = os.sched_getaffinity(0)
+    try:
+        os.sched_setaffinity(0, config["environment"]["cpus"])
+        result = run.manifest_job(config, {"length": 1_000_000, "variant": "index", "workers": 2, "method": "spawn"})
+    finally:
+        os.sched_setaffinity(0, previous_affinity)
+    assert len(result["rows"]) == 6
+    workers = [row for row in result["rows"] if row["role"] == "worker"]
+    assert len({row["pid"] for row in workers}) == 2
+    for row in result["rows"]:
+        assert row["retained_python_paths"] == row["diagnostics"]["manifest_entries"] == 1_000_000
+        assert row["diagnostics"]["input_capacity"] == row["diagnostics"]["native_live"] == 0
 
 
 def test_complete_memory_matrix_and_missing_phase(config, tmp_path):

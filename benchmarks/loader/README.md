@@ -83,6 +83,12 @@ remain available. Re-executed child requests get distinct resume suffixes.
   exact resource diagnostics. A separate eight-array retention control reports
   output nbytes, followed by array and Loader deletion. Process RSS/PSS/peak RSS
   sampling occurs only in memory jobs, every 100 ms.
+  Manifest startup and phase handshakes share the configuration's 120-second
+  deadline, including the time spent spawning/unpickling the other worker.
+  The explicit pre-review regression is
+  `IMGREAD_REQUIRE_LARGE_MANIFEST=1 uv run --project benchmarks/loader --no-sync python -m pytest scripts/tests/test_loader_study.py -q -k million_entry`
+  with a diagnostic wheel installed; it checks the million-entry indexed spawn
+  case without creating scientific timing or memory-study results.
 - Native runs all eight independent heaptrack prefixes three times. A symbolized
   diagnostic wheel supplies the prefixes; the normal wheel supplies all timings.
   The child calls `heaptrack_stop()` while the checkpoint is alive, then permits
