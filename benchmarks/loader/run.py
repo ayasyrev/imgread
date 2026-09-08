@@ -747,6 +747,15 @@ def cohort(cell):
     return cell["workload"], cell["backend"], cell["workers"]
 
 
+def check_validation_digests(config, cells):
+    matrix = configurations(config)
+    for workload, backend in {(cell["workload"], cell["backend"]) for cell in matrix}:
+        digests = {cells[cell["config_id"]]["result_digest"] for cell in matrix
+                   if cell["workload"] == workload and cell["backend"] == backend}
+        if len(digests) != 1 or None in digests:
+            raise ValueError("variant/worker output pixel and label digests differ")
+
+
 def timing_stage(config, run_dir, heartbeat):
     validation = json.loads((run_dir / "validation.json").read_text())
     matrix = configurations(config)
@@ -921,10 +930,7 @@ def run_stage(stage, config, run_dir, provenance, heartbeat):
         cells = {}
         for cell in configurations(config):
             cells[cell["config_id"]] = child_job(config, {"kind": "validate", "cell": cell}, run_dir, "validate-" + cell["config_id"], heartbeat)
-        for group in {cohort(cell) for cell in configurations(config)}:
-            digests = {cells[cell["config_id"]]["result_digest"] for cell in configurations(config) if cohort(cell) == group}
-            if len(digests) != 1 or None in digests:
-                raise ValueError("variant output pixel/label digest mismatch")
+        check_validation_digests(config, cells)
         stress = child_job(config, {"kind": "stress"}, run_dir, "stress", heartbeat)
         atomic_json(run_dir / "validation.json", {"binding": provenance["binding"], "order_digest": hashlib.sha256(canonical(order)).hexdigest(), "cells": cells, "stress": stress})
     elif stage == "timing":

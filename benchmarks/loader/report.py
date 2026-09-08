@@ -276,15 +276,13 @@ def generate(config, run_dir, check_complete=True):
         raise ValueError("preflight did not construct all twelve DataLoader cells")
     config_ids = {cell["config_id"] for cell in configurations(config)}
     constructors = {row["config_id"]: row["kwargs"] for row in provenance["pipeline_constructors"]}
-    from run import pipeline_kwargs, cohort
+    from run import pipeline_kwargs, check_validation_digests
     for cell in configurations(config):
         if cell["workload"] == "pipeline" and constructors.get(cell["config_id"]) != pipeline_kwargs(config, cell["workers"]):
             raise ValueError("recorded pipeline constructor settings changed")
     if set(validation["cells"]) != config_ids or len(validation["stress"]) != 10:
         raise ValueError("incomplete output validation")
-    for group in {cohort(cell) for cell in configurations(config)}:
-        if len({validation["cells"][cell["config_id"]]["result_digest"] for cell in configurations(config) if cohort(cell) == group}) != 1:
-            raise ValueError("validated outputs differ across variants")
+    check_validation_digests(config, validation["cells"])
     timing = timings(config, read_rows(run_dir / "timings.jsonl"), validation)
     memory = memory_evidence(config, read_rows(run_dir / "memory.jsonl"), run_dir)
     native = native_evidence(config, run_dir)

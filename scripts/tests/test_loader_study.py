@@ -316,3 +316,13 @@ def test_progressive_fixture_encoder_scratch(config, tmp_path):
     assert ImageFile.MAXBLOCK == previous
     assert generated["inputs"]["progressive"]["bytes"] > 1048576
     assert len(run.validate_stress(config, generated)) == 10
+
+
+def test_validation_digest_compares_worker_profiles(config):
+    validation, _ = evidence(config)
+    run.check_validation_digests(config, validation['cells'])
+    for cell in run.configurations(config):
+        if cell['workload'] == 'pipeline' and cell['workers'] == 2:
+            validation['cells'][cell['config_id']]['result_digest'] = 'different-worker-result'
+    with pytest.raises(ValueError, match='digests differ'):
+        run.check_validation_digests(config, validation['cells'])
