@@ -69,6 +69,9 @@ remain available. Re-executed child requests get distinct resume suffixes.
   eighteen configurations, then checks deterministic small/large/progressive,
   corrupt and oversized fixtures. The corrupt JPEG has exactly four bytes at
   `entropy_start+16` replaced by `FF C4 00 01`; no on-run mutation search is allowed.
+  Each of the 64×64 and 2048×2048 RGB arrays uses a fresh PCG64(37), with baseline
+  JPEG, progressive JPEG and PNG variants. The limit fixture starts from a 2×2
+  black JPEG. Generator/Pillow versions and every file's size/hash are recorded.
 - Timing uses five randomized rounds, a common seed-37 image order and equal epoch
   counts within each function/path/index cohort. Each accepted round has at least
   two whole epochs and two seconds of work. Warmup, startup and list preparation
@@ -105,6 +108,10 @@ and completion records remain in the distinct external workflow control director
 `docs/plans/<id>.<SHA>.attempt-01/`. An exclusive local file lock allows only one
 active attempt. One documented infrastructure/interruption/resource retry is
 allowed as `attempt-02`; semantic failures require a code fix and new SHA/review.
+An attempt with a terminal failure cannot be reopened under its original number.
+Within an attempt, staged invocations resume only at a successfully recorded
+stage boundary. A killed/in-progress stage requires a documented failure and the
+permitted next attempt; its calibration allowance cannot reset in place.
 No timing selection or corpus/matrix reduction is allowed to obtain a positive
 result.
 

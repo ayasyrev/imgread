@@ -26,7 +26,7 @@ import corpus
 
 ROOT = Path(__file__).resolve().parents[2]
 STAGES = ("preflight", "validate", "timing", "memory", "native", "report")
-FROZEN_CONFIG_SHA256 = "8e3e6e023594adbbc90ab73128fca382a6cb597e3911438a3c3f720f33f6f50b"
+FROZEN_CONFIG_SHA256 = "06e4ab74ca8fe6100ca43ca1ee2e96baa36a56998c03ef2989c015ff3a4dd3b7"
 
 
 def canonical(value):
@@ -652,6 +652,8 @@ def validate_stress(config, generated):
     import imgread
     import warnings
     rows = []
+    if set(generated["inputs"]) != set(corpus.SYNTHETIC_FILES):
+        raise ValueError("incomplete synthetic input matrix")
     for backend in config["backends"]:
         loader = imgread.Loader(backend=backend)
         for kind, item in generated["inputs"].items():
@@ -896,6 +898,18 @@ def verify_stage(record, run_dir, binding):
 
 
 def check_retry(config, control, run_dir):
+    current_path = control / "completion.json"
+    if current_path.exists():
+        current = json.loads(current_path.read_text())
+        if "failure_kind" in current or "error" in current:
+            raise ValueError("attempt has a terminal failure; semantic failures need a new SHA/review, eligible infrastructure failures need the next attempt")
+    elif (control / "launch.json").exists():
+        raise ValueError("attempt was interrupted without a completion record; document its failure before entering the next attempt")
+    stage_path = control / "stages.json"
+    if stage_path.exists():
+        stages = json.loads(stage_path.read_text())
+        if any(record.get("exit_code") != 0 for record in stages.values()):
+            raise ValueError("attempt has an interrupted or failed stage; its disposition must be recorded before entering the next attempt")
     if run_dir.name == "attempt-01":
         return 0
     previous = control.with_name(control.name.replace("attempt-02", "attempt-01"))
@@ -1041,6 +1055,10 @@ def supervise(config, run_dir, selected_stage):
                     if stage in records and records[stage].get("exit_code") == 0:
                         verify_stage(records[stage], run_dir, binding)
                         continue
+                    # Persist admission before any stage work. An uncatchable
+                    # interruption cannot masquerade as a clean stage boundary.
+                    records[stage] = {"exit_code": None, "binding": binding, "started_ns": time.monotonic_ns()}
+                    atomic_json(stage_path, records)
                     for filename in ({"timing": ["timings.jsonl", "timings-discarded.jsonl"], "memory": ["memory.jsonl"], "native": ["native-profiles.json"]}.get(stage, [])):
                         path = run_dir / filename
                         if path.exists():
@@ -1062,7 +1080,7 @@ def supervise(config, run_dir, selected_stage):
                 success = all(stage in records and records[stage]["exit_code"] == 0 for stage in STAGES)
                 atomic_json(control / "completion.json", {"success": success, "binding": binding, "pending": [stage for stage in STAGES if stage not in records], "elapsed_ns": time.monotonic_ns() - launch["started_ns"]})
         except BaseException as error:
-            if active_stage and active_stage not in records:
+            if active_stage and records.get(active_stage, {}).get("exit_code") != 0:
                 records[active_stage] = {"exit_code": 1, "binding": binding, "error": repr(error)}
                 atomic_json(stage_path, records)
             atomic_json(control / "completion.json", {"success": False, "binding": binding, "failure_kind": classify_failure(error), "error": repr(error), "elapsed_ns": time.monotonic_ns() - launch["started_ns"]})

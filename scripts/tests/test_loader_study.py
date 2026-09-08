@@ -257,13 +257,17 @@ def test_complete_memory_matrix_and_missing_phase(config, tmp_path):
                                 row["diagnostics"] = state(live=int(backend == "auto" and phase != "destroyed"))
                                 row["calls"] = [{"diagnostics": state(live=int(backend == "auto"))} for _ in range(count)]
                                 row["output_count"] = 8 if phase == "outputs-retained" else 0
-                                row["output_nbytes"] = row["output_count"] * 256 * 256 * 3
+                                row["output_nbytes"] = row["output_count"] * 64 * 64 * 3
                             rows.append(row)
     result = report.memory_evidence(config, rows, tmp_path)
     assert result["sequence_cases"] == 8 and result["manifest_cases"] > 0
     assert len(result["manifest_summary"]) > 0
     with pytest.raises(ValueError, match="incomplete"):
         report.memory_evidence(config, rows[:-1], tmp_path)
+    wrong_outputs = copy.deepcopy(rows)
+    next(row for row in wrong_outputs if row.get("phase") == "outputs-retained" and "output_nbytes" in row)["output_nbytes"] = 8 * 256 * 256 * 3
+    with pytest.raises(ValueError, match="retained output control mismatch"):
+        report.memory_evidence(config, wrong_outputs, tmp_path)
 
 
 def test_native_matrix_allows_zero_native_at_global_peak(config, tmp_path):
@@ -308,14 +312,111 @@ def test_internal_worker_request_cannot_escape_or_override_matrix(config, tmp_pa
 
 def test_progressive_fixture_encoder_scratch(config, tmp_path):
     pytest.importorskip("imgread", reason="fixture correctness requires an installed wheel")
-    from PIL import ImageFile
-    settings = copy.deepcopy(config["sequence"])
-    settings["large_shape"] = [768, 768, 3]
+    import io
+    import numpy as np
+    import PIL
+    from PIL import Image, ImageFile
+    settings = config["sequence"]
+    assert settings["small_shape"] == [64, 64, 3]
+    assert settings["large_shape"] == [2048, 2048, 3]
     previous = ImageFile.MAXBLOCK
     generated = corpus.generate(settings, tmp_path)
     assert ImageFile.MAXBLOCK == previous
+    assert generated["versions"] == {"numpy": np.__version__, "pillow": PIL.__version__}
+    assert set(generated["inputs"]) == {"small", "small-progressive", "small-png", "large", "progressive", "large-png", "corrupt", "oversized"}
+    for size, shape in (("small", (64, 64, 3)), ("large", (2048, 2048, 3))):
+        expected = np.random.Generator(np.random.PCG64(37)).integers(0, 256, shape, dtype=np.uint8)
+        with Image.open(generated["inputs"][size + "-png"]["path"]) as png:
+            np.testing.assert_array_equal(np.asarray(png), expected)
+        baseline = io.BytesIO()
+        Image.fromarray(expected).save(baseline, format="JPEG", quality=95, subsampling=0, optimize=False, progressive=False)
+        assert Path(generated["inputs"][size]["path"]).read_bytes() == baseline.getvalue()
+        progressive = "small-progressive" if size == "small" else "progressive"
+        with Image.open(generated["inputs"][progressive]["path"]) as jpg:
+            assert jpg.info["progressive"]
+    black = io.BytesIO()
+    Image.new("RGB", (2, 2), (0, 0, 0)).save(black, format="JPEG", quality=95, subsampling=0, optimize=False, progressive=False)
+    oversized = bytearray(black.getvalue())
+    frame = oversized.index(b"\xff\xc0")
+    oversized[frame + 5:frame + 9] = (65000).to_bytes(2, "big") * 2
+    assert Path(generated["inputs"]["oversized"]["path"]).read_bytes() == oversized
+    assert generated["inputs"]["small"]["bytes"] < 1048576 < generated["inputs"]["large"]["bytes"]
     assert generated["inputs"]["progressive"]["bytes"] > 1048576
-    assert len(run.validate_stress(config, generated)) == 10
+    assert len(run.validate_stress(config, generated)) == 16
+
+
+@pytest.mark.parametrize("attempt", ["attempt-01", "attempt-02"])
+@pytest.mark.parametrize("failure, message", [("semantic-or-unclassified", "exhausted whole-epoch calibration"), ("external-interruption", "cancelled")])
+def test_terminal_failure_cannot_resume_same_attempt(config, tmp_path, attempt, failure, message):
+    control = tmp_path / ("control." + attempt)
+    control.mkdir()
+    (control / "completion.json").write_text(json.dumps({"success": False, "failure_kind": failure, "error": message, "elapsed_ns": 1000}))
+    before = (control / "completion.json").read_bytes()
+    with pytest.raises(ValueError, match="terminal failure"):
+        run.check_retry(config, control, tmp_path / attempt)
+    assert (control / "completion.json").read_bytes() == before
+
+
+def test_resume_requires_clean_stage_boundary(config, tmp_path):
+    control = tmp_path / "control.attempt-01"
+    control.mkdir()
+    run_dir = tmp_path / "attempt-01"
+    assert run.check_retry(config, control, run_dir) == 0
+    (control / "launch.json").write_text("{}")
+    with pytest.raises(ValueError, match="interrupted"):
+        run.check_retry(config, control, run_dir)
+    (control / "completion.json").write_text(json.dumps({"success": False, "pending": ["validate", "timing", "memory", "native", "report"]}))
+    (control / "stages.json").write_text(json.dumps({"preflight": {"exit_code": 0}}))
+    assert run.check_retry(config, control, run_dir) == 0
+    for exit_code in (None, 1):
+        (control / "stages.json").write_text(json.dumps({"preflight": {"exit_code": 0}, "timing": {"exit_code": exit_code}}))
+        with pytest.raises(ValueError, match="interrupted or failed stage"):
+            run.check_retry(config, control, run_dir)
+
+
+def test_supervisor_preserves_exhausted_calibration_failure(config, tmp_path, monkeypatch):
+    """Exercise supervisor persistence without decoding or scientific timing."""
+    settings = copy.deepcopy(config)
+    settings["workflow_record_root"] = str(tmp_path)
+    run_dir, control = tmp_path / "attempt-01", tmp_path / "control.attempt-01"
+    run_dir.mkdir()
+    control.mkdir()
+    identity = {"code_sha": "reviewed-sha"}
+    wheels = {name: {"sha256": name} for name in ("normal", "diagnostic")}
+    binding = dict(identity, wheels={name: row["sha256"] for name, row in wheels.items()}, corpus_sha256=config["corpus"]["manifest_sha256"])
+    (control / "stages.json").write_text(json.dumps({stage: {"exit_code": 0, "binding": binding, "artifacts": {}} for stage in ("preflight", "validate")}))
+    monkeypatch.setattr(run, "code_identity", lambda _config: identity)
+    monkeypatch.setattr(run, "run_paths", lambda *_args: (run_dir, control))
+    monkeypatch.setattr(run, "service_envelope", lambda *_args: None)
+    monkeypatch.setattr(run, "wheels", lambda *_args: wheels)
+    monkeypatch.setattr(corpus, "select", lambda *_args: ([], b""))
+    class Heartbeat:
+        def __init__(self, *_args):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            pass
+        def pulse(self):
+            pass
+    monkeypatch.setattr(run, "Heartbeat", Heartbeat)
+    calls = []
+    def exhausted(stage, *_args):
+        assert json.loads((control / "stages.json").read_text())[stage]["exit_code"] is None
+        calls.append(stage)
+        raise ValueError("timing group exhausted duration calibration budget")
+    monkeypatch.setattr(run, "run_stage", exhausted)
+    with pytest.raises(ValueError, match="exhausted duration calibration"):
+        run.supervise(settings, run_dir, "timing")
+    completion = (control / "completion.json").read_bytes()
+    stages = (control / "stages.json").read_bytes()
+    assert json.loads(completion)["failure_kind"] == "semantic-or-unclassified"
+    assert json.loads(stages)["timing"]["exit_code"] == 1
+    with pytest.raises(ValueError, match="terminal failure"):
+        run.supervise(settings, run_dir, "timing")
+    assert calls == ["timing"]
+    assert (control / "completion.json").read_bytes() == completion
+    assert (control / "stages.json").read_bytes() == stages
 
 
 def test_validation_digest_compares_worker_profiles(config):

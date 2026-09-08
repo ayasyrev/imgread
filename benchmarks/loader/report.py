@@ -204,7 +204,9 @@ def memory_evidence(config, rows, run_dir):
                 for state in states:
                     if state.get("input_len", 0) or state.get("input_capacity", 0) > cap or state.get("native_live", 0) > 1:
                         raise ValueError("retained input/native resource violation")
-                if row["phase"] == "outputs-retained" and (row["output_count"] != 8 or row["output_nbytes"] != 8 * 256 * 256 * 3):
+                output_count = config["sequence"]["retained_outputs"]
+                output_nbytes = output_count * math.prod(config["sequence"]["small_shape"])
+                if row["phase"] == "outputs-retained" and (row["output_count"] != output_count or row["output_nbytes"] != output_nbytes):
                     raise ValueError("retained output control mismatch")
                 if len(states) == 32 and backend == "auto":
                     if {state["native_live"] for state in states} != {1} or len({state["native_creations"] for state in states}) != 1:
@@ -280,7 +282,9 @@ def generate(config, run_dir, check_complete=True):
     for cell in configurations(config):
         if cell["workload"] == "pipeline" and constructors.get(cell["config_id"]) != pipeline_kwargs(config, cell["workers"]):
             raise ValueError("recorded pipeline constructor settings changed")
-    if set(validation["cells"]) != config_ids or len(validation["stress"]) != 10:
+    stress_keys = [(row["backend"], row["kind"]) for row in validation["stress"]]
+    expected_stress = {(backend, kind) for backend in config["backends"] for kind in corpus.SYNTHETIC_FILES}
+    if set(validation["cells"]) != config_ids or len(stress_keys) != len(expected_stress) or set(stress_keys) != expected_stress:
         raise ValueError("incomplete output validation")
     check_validation_digests(config, validation["cells"])
     timing = timings(config, read_rows(run_dir / "timings.jsonl"), validation)

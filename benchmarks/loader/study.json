@@ -43,8 +43,9 @@
     "caps": [0, 1048576], "workers": [0, 2], "start_method": "spawn", "epochs": 2,
     "phases": [["small-before", "small", 32], ["large", "large", 1], ["small-after", "small", 32], ["corrupt", "corrupt", 1], ["recovered", "small", 32], ["oversized", "oversized", 1], ["limit-recovered", "small", 32], ["progressive-large", "progressive", 1], ["progressive-recovered", "small", 32]],
     "retained_outputs": 8,
-    "small_shape": [256, 256, 3], "large_shape": [3072, 3072, 3],
-    "seed": 37, "jpeg_quality": 95, "subsampling": 0,
+    "small_shape": [64, 64, 3], "large_shape": [2048, 2048, 3],
+    "seed": 37, "generator": "PCG64", "jpeg_quality": 95, "subsampling": 0, "optimize": false,
+    "formats": ["jpeg", "progressive-jpeg", "png"], "oversized_base_shape": [2, 2, 3],
     "corruption": "replace four bytes at entropy_start+16 with FF C4 00 01"
   },
   "native": {
