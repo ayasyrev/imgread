@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 
 # Import the example under a stable name so spawn can reconstruct its classes.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "examples"))
-from loader_datasets import IndexedDataset, image_folder, numpy_to_tensor
+from loader_datasets import BufferDataset, IndexedDataset, image_folder, numpy_to_tensor
 import imgread
 
 
@@ -90,3 +90,31 @@ def test_path_and_index_datasets(tmp_path, method, warm):
                         worker.kill()
                         worker.join(5)
                 assert not any(worker.is_alive() for worker in workers)
+
+
+@pytest.mark.parametrize("method", [None, *mp.get_all_start_methods()])
+def test_buffer_dataset_persistent_workers(method):
+    from test_beta_contract import encode
+    torch.set_num_threads(1)
+    samples = [(encode(fmt=fmt), label) for label, fmt in enumerate(("JPEG", "PNG", "TIFF"))]
+    dataset = BufferDataset(samples)
+    expected = [dataset[index] for index in (2, 0, 2, 1)]  # Warm before spawn/fork.
+    loader = DataLoader(dataset, sampler=[2, 0, 2, 1], batch_size=2,
+                        num_workers=0 if method is None else 2,
+                        persistent_workers=method is not None,
+                        multiprocessing_context=method,
+                        worker_init_fn=thread_limits, timeout=0 if method is None else 20)
+    try:
+        pids = None
+        for _ in range(2):
+            actual = [(image, label) for images, labels in loader for image, label in zip(images, labels.tolist())]
+            for (image, label), (want, target) in zip(actual, expected, strict=True):
+                assert label == target
+                np.testing.assert_array_equal(image.numpy(), want.numpy())
+            if method is not None:
+                current = [worker.pid for worker in loader._iterator._workers]
+                assert pids is None or current == pids
+                pids = current
+    finally:
+        if loader._iterator is not None:
+            loader._iterator._shutdown_workers()

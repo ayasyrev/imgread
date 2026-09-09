@@ -18,6 +18,35 @@ Selection takes the first 100 JPEGs in sorted filename order from each of ten
 sorted class directories. Each run saves the selected paths and sizes in
 `corpus.tsv`, along with its configuration and environment.
 
+## Buffer comparison
+
+`buffers.py` compares `load_numpy_from_bytes(data)` with a persistent
+`Loader.decode(data)`. All encoded images are loaded before measurement; file
+reads are excluded from timed epochs.
+
+The matrix covers `auto` and `image`, immutable `bytes` and `memoryview` (both APIs
+copy the latter), direct decode and DataLoader with 0 or 2 workers. The pipeline
+uses 224×224 HWC uint8 crops, batch size 32, spawn, persistent workers and no
+pinning. Five paired rounds randomize function/Loader order, use equal whole-epoch
+counts and target at least two seconds per variant. Full outputs and labels are
+hashed outside timing to check that the compared APIs produce the same results.
+Worker PIDs must stay stable across epochs. Initialization, validation and warmup
+are reported separately. Preloaded buffers are copied into each spawn worker;
+that memory and startup cost is separate from decode time.
+
+```sh
+uv run --no-sync maturin build --release --locked --out target/buffer-wheels/normal
+uv pip install --python benchmarks/loader/.venv/bin/python --no-deps --force-reinstall target/buffer-wheels/normal/*.whl
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 uv run --project benchmarks/loader --no-sync python benchmarks/loader/buffers.py --corpus-root "$IMGREAD_CORPUS" --output target/buffer-comparison.json
+```
+
+Run on Linux with CPUs 0–3 available (or set `--cpus`). Build a normal release
+wheel with TurboJPEG; debug and diagnostic builds are rejected for timing.
+JSON preserves every round, paired ratios, quartiles, output digests and the
+environment. Choose a new output file for each run.
+
+Store benchmark reports and raw results in external project documentation.
+
 ## Path/index study
 
 Build a normal release wheel for timing and a diagnostic release wheel with Rust

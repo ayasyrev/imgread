@@ -18,14 +18,14 @@ def state(loader):
     return loader._debug_state() if hasattr(loader, "_debug_state") else {"pid": os.getpid()}
 
 
-def child_calls(loader, connection):
+def child_calls(loader, connection, data=None):
     try:
         initial = state(loader)
         phases = []
         for _ in range(2):
             assert connection.poll(5), "parent phase timeout"
             assert connection.recv() == "load"
-            array = loader[0]
+            array = loader[0] if data is None else loader.decode(data)
             phases.append(state(loader))
             connection.send({"shape": array.shape, "pixels": array.tobytes().hex(), "state": phases[-1]})
         connection.send({"initial": initial, "phases": phases})
@@ -43,15 +43,16 @@ def terminate(process):
         process.join(5)
 
 
-def process_probe(path, method, warm):
+def process_probe(path, method, warm, buffer=False):
     context = mp.get_context(method)
     loader = imgread.Loader([str(path)])
     expected = imgread.load_numpy(path)
+    data = path.read_bytes() if buffer else None
     if warm:
-        loader[0]
+        loader[0] if data is None else loader.decode(data)
     before = state(loader)
     parent, child = context.Pipe()
-    process = context.Process(target=child_calls, args=(loader, child))
+    process = context.Process(target=child_calls, args=(loader, child, data))
     process.start()
     child.close()
     try:
@@ -94,6 +95,7 @@ def pickle_probe(path):
                 assert state(restored).get("input_capacity", 0) == 0
                 assert state(restored).get("native_creations", 0) == 0
                 assert restored(path).tobytes() == loader(path).tobytes()
+                assert restored.decode(path.read_bytes()).tobytes() == loader.decode(path.read_bytes()).tobytes()
                 if paths is not None:
                     assert len(restored) == len(paths)
                 results.append({"protocol": protocol, "warm": warm, "paths": paths, "payload_bytes": len(payload)})
@@ -194,6 +196,7 @@ def overlap_probe(path):
         assert entered.wait(5)
         busy(lambda: loader(path))
         busy(lambda: loader[0])
+        busy(lambda: loader.decode(path.read_bytes()))
         if hasattr(loader, "_debug_state"):
             busy(loader._debug_state)
         assert bool(loader) and len(loader) == 1
@@ -221,8 +224,10 @@ def overlap_probe(path):
         warnings.simplefilter("always")
         def showwarning(*args, **kwargs):
             busy(lambda: warning_loader(png))
+            busy(lambda: warning_loader.decode(png.read_bytes()))
         warnings.showwarning = showwarning
         warning_loader(png)
+        warning_loader.decode(png.read_bytes())
     loader(path)
     return {"overlap": "passed", "pid": os.getpid()}
 
@@ -274,6 +279,7 @@ def main():
     parser.add_argument("mode", choices=["process", "pickle", "path-spelling", "overlap", "fifo", "constructor-no-io", "import-no-torch"])
     parser.add_argument("--method", choices=mp.get_all_start_methods())
     parser.add_argument("--warm", action="store_true")
+    parser.add_argument("--buffer", action="store_true")
     parser.add_argument("--paths-root", default="/tmp/imgread-loader-noio-sentinel")
     args = parser.parse_args()
     if args.mode == "constructor-no-io":
@@ -295,7 +301,7 @@ def main():
             path = Path(directory) / "unicode-изображение.jpg"
             Image.new("RGB", (13, 7), (10, 50, 100)).save(path)
             if args.mode == "process":
-                result = process_probe(path, args.method, args.warm)
+                result = process_probe(path, args.method, args.warm, args.buffer)
             elif args.mode == "pickle":
                 result = pickle_probe(path)
             elif args.mode == "path-spelling":

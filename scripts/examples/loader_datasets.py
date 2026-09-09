@@ -1,4 +1,4 @@
-"""Two independent Dataset patterns. Run with a class-directory image root."""
+"""Path, index and encoded-buffer Dataset patterns. CLI accepts a class-directory root."""
 import argparse
 from pathlib import Path
 
@@ -36,6 +36,20 @@ class IndexedDataset(Dataset):
 
     def __getitem__(self, index):
         return numpy_to_tensor(self.loader[index]), self.labels[index]
+
+
+class BufferDataset(Dataset):
+    """Encoded bytes supplied by the caller; one decoder per worker process."""
+    def __init__(self, samples, **options):
+        self.samples = tuple(samples)
+        self.loader = Loader(**options)
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, index):
+        data, label = self.samples[index]
+        return numpy_to_tensor(self.loader.decode(data)), label
 
 
 def indexed_dataset(root):

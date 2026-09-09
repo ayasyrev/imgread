@@ -36,8 +36,10 @@ def probe(*args):
 
 @pytest.mark.parametrize("method", mp.get_all_start_methods())
 @pytest.mark.parametrize("warm", [False, True])
-def test_process_methods(method, warm):
-    result = probe("process", "--method", method, *(["--warm"] if warm else []))
+@pytest.mark.parametrize("buffer", [False, True])
+def test_process_methods(method, warm, buffer):
+    result = probe("process", "--method", method, *(["--warm"] if warm else []),
+                   *(["--buffer"] if buffer else []))
     assert result["parent_before"]["pid"] == result["parent_after"]["pid"]
     phases = result["child"]["phases"]
     assert phases[0]["pid"] == phases[1]["pid"]

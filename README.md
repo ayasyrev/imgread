@@ -31,7 +31,9 @@ Every successful call returns a new writable, C-contiguous `numpy.ndarray` of
 shape `(height, width, 3)` and dtype `uint8`. The default order is RGB; `color="bgr"`
 reverses the channels. Only `dtype="uint8"` is supported. Color, dtype, backend and
 limit-profile names are case-insensitive. Bytes paths are rejected; use the buffer
-APIs for encoded bytes. Decoding releases the GIL after taking a private input copy.
+APIs for encoded bytes. Decoding releases the GIL. The standalone buffer functions
+copy their input; `Loader.decode` borrows immutable `bytes` for the duration of the
+call and copies other buffer types before releasing the GIL.
 
 - JPEG: baseline, progressive, grayscale and CMYK. CMYK may use the fallback
   decoder. Decoder rounding and chroma upsampling can produce small pixel
@@ -48,6 +50,31 @@ APIs for encoded bytes. Decoding releases the GIL after taking a private input c
 
 Other formats are rejected even though the underlying Rust `image` dependency
 retains its default features in this beta.
+
+## Persistent Loader
+
+```python
+loader = imgread.Loader(color="rgb", backend="auto")
+rgb = loader("photo.jpg")
+data = Path("photo.jpg").read_bytes()  # or an encoded image from another source
+rgb = loader.decode(data)
+
+indexed = imgread.Loader(["first.jpg", "second.jpg"])
+rgb = indexed[0]
+```
+
+`decode(data)` accepts the same uint8-compatible buffers as `load_numpy_from_bytes`,
+including strided views, and uses the Loader's fixed options and resource limits.
+It reuses the same native JPEG state as path/index calls and returns an independent
+array. Input buffers are never retained. Mutable buffers and memoryviews, including
+read-only views, are copied in C order; immutable `bytes` require no input copy.
+`max_buffer_bytes` caps retained file-read storage only, not the accepted image size.
+
+A Loader can be pickled and passed to DataLoader workers: each process initializes
+its own decoder lazily. Keep one Loader per worker; overlapping or reentrant calls
+on the same instance raise `RuntimeError`. Buffer data belongs to the caller and
+is not included in the Loader's pickle. Preloading an entire dataset is optional
+and has its own memory and worker-startup costs.
 
 ## Backends and the simple API
 

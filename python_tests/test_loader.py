@@ -173,7 +173,7 @@ def test_exact_function_parity(mode, fmt, options, backend, color, limits, tmp_p
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         expected = imgread.load_numpy(path, backend=backend, color=color, limits=limits)
-        for actual in (loader(path), loader[0], loader[0]):
+        for actual in (loader(path), loader[0], loader.decode(path.read_bytes()), loader[0]):
             np.testing.assert_array_equal(actual, expected)
             assert actual.dtype == np.uint8 and actual.flags.writeable and actual.flags.c_contiguous
 

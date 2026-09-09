@@ -100,6 +100,17 @@ impl DecoderWorkspace {
         self.native
             .decode_bytes(&bytes, Some(path), backend, bgr, simple, limits)
     }
+
+    pub(crate) fn decode_buffer(
+        &mut self,
+        bytes: &[u8],
+        backend: DecodeBackend,
+        bgr: bool,
+        limits: DecodeLimits,
+    ) -> Result<DecodeOutput, ImgReadError> {
+        self.native
+            .decode_bytes(bytes, None, backend, bgr, false, limits)
+    }
 }
 
 fn detect_format(bytes: &[u8], path: Option<&Path>) -> Result<ImageFormat, ImgReadError> {

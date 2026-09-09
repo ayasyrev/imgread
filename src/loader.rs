@@ -1,5 +1,6 @@
 //! Frozen Python configuration with one nonblocking, process-owned workspace.
 use crate::{
+    buffer_bytes,
     decoder::{DecodeBackend, DecoderWorkspace},
     limits::DecodeLimits,
     python_path, to_numpy, validate_args,
@@ -50,7 +51,7 @@ struct ProcessWorkspace {
     decoder: DecoderWorkspace,
 }
 
-/// Reuse bounded input and independent native decoding state for individual paths.
+/// Reuse bounded file input and independent native decoding state for paths/buffers.
 /// Snapshot paths once; files are opened lazily, relative to cwd at each load.
 #[pyclass(frozen, mapping, module = "imgread")]
 pub(crate) struct Loader {
@@ -104,6 +105,19 @@ impl Loader {
             )
         })?;
         // Neither mutex nor input lease survives into Python callbacks/conversion.
+        to_numpy(py, result)
+    }
+    fn load_buffer(&self, py: Python<'_>, bytes: &[u8]) -> PyResult<Py<PyAny>> {
+        let result = py.detach(|| {
+            let mut state = self.workspace()?;
+            Ok::<_, PyErr>(
+                state
+                    .as_mut()
+                    .expect("initialized workspace")
+                    .decoder
+                    .decode_buffer(bytes, self.backend, self.bgr, self.limits),
+            )
+        })?;
         to_numpy(py, result)
     }
     fn manifest(&self) -> PyResult<&[PathBuf]> {
@@ -165,6 +179,19 @@ impl Loader {
         let _admission = self.admit()?;
         let path = python_path(py, path)?;
         self.load(py, &path)
+    }
+    /// Decode an encoded uint8-compatible buffer using this Loader's options.
+    /// Immutable bytes are borrowed for the call; other buffers are copied in
+    /// C order before releasing the GIL. Input is never retained by the Loader.
+    fn decode(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let _admission = self.admit()?;
+        if let Ok(bytes) = data.cast::<PyBytes>() {
+            // The live Python argument owns immutable storage throughout detach.
+            self.load_buffer(py, bytes.as_bytes())
+        } else {
+            let bytes = buffer_bytes(py, data, self.limits)?;
+            self.load_buffer(py, &bytes)
+        }
     }
     fn __getitem__(&self, py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let _admission = self.admit()?;
