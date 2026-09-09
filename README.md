@@ -167,12 +167,9 @@ cargo fmt -- --check
 cargo clippy --locked --all-targets --all-features -- -D warnings
 uv run maturin build --release --locked --sdist
 uv run twine check target/wheels/*
-uv run python scripts/check_artifacts.py --allow-local target/wheels/*
-uv run python scripts/update_notices.py --check
 ```
 
-`--allow-local` validates local artifacts without certifying their platform tags
-for release. Keep maturin's configured features when building; passing
+Keep maturin's configured features when building; passing
 `--features extension-module` alone overrides them and removes TurboJPEG.
 
 ## License
@@ -240,14 +237,8 @@ fork create process-owned decoding state. Fork while a Loader call is active is
 unsupported. Long-lived workers retain at most one workspace per Loader; process
 startup, manifest copies and pickle costs remain part of application preparation.
 
-For PyTorch, see [runnable examples](scripts/examples/loader_datasets.py):
-`ImageFolder(..., loader=Loader(), is_valid_file=supported_extension,
-transform=numpy_to_tensor)` calls Loader with a **path**. The separate
-`IndexedDataset` snapshots ordered paths and corresponding labels and calls
-`loader[index]`. Both use a NumPy-compatible transform; arbitrary PIL transforms
-need adaptation. Torch and torchvision are optional example/study dependencies,
-never imgread runtime dependencies.
-
-The isolated [Loader study](benchmarks/loader/README.md) compares functional, path
-and indexed calls with equal work and reports startup and memory separately.
-Performance measurements describe the tested corpus, hardware and pipeline.
+For PyTorch, `ImageFolder(..., loader=Loader())` calls Loader with a **path**.
+Use a transform that accepts NumPy arrays and restrict the dataset to supported
+image formats. An indexed Dataset can snapshot paths in a Loader and call
+`loader[index]`, keeping labels alongside the paths. Torch and torchvision are
+optional integrations, never imgread runtime dependencies.

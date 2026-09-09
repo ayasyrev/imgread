@@ -7,7 +7,7 @@ publish = false
 include = [
     "/src/**", "/Cargo.toml", "/Cargo.lock", "/pyproject.toml", "/uv.lock", "/python/**",
     "/README.md", "/LICENSE", "/THIRD_PARTY_NOTICES.md", "/licenses/**",
-    "/tests/**", "/python_tests/**", "/scripts/**", "/about.toml", "/about.hbs", "/deny.toml",
+    "/tests/**", "/python_tests/**", "/about.toml", "/about.hbs", "/deny.toml",
 ]
 license = "MIT"
 readme = "README.md"

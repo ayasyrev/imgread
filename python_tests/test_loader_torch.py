@@ -4,7 +4,6 @@ import multiprocessing as mp
 import os
 from pathlib import Path
 import random
-import sys
 
 import numpy as np
 import pytest
@@ -17,12 +16,48 @@ if importlib.util.find_spec("torch") is None or importlib.util.find_spec("torchv
     pytest.skip("optional torch integration environment", allow_module_level=True)
 
 import torch
-from torch.utils.data import DataLoader
-
-# Import the example under a stable name so spawn can reconstruct its classes.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "examples"))
-from loader_datasets import BufferDataset, IndexedDataset, image_folder, numpy_to_tensor
+from torch.utils.data import DataLoader, Dataset
+from torchvision.datasets import ImageFolder
 import imgread
+
+
+def numpy_to_tensor(array):
+    return torch.from_numpy(np.ascontiguousarray(array.transpose(2, 0, 1))).float().div_(255)
+
+
+def supported_extension(path):
+    return Path(path).suffix.lower() in {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+
+
+def image_folder(root):
+    return ImageFolder(root, loader=imgread.Loader(), is_valid_file=supported_extension,
+                       transform=numpy_to_tensor)
+
+
+# Module-level test datasets remain importable by spawn workers.
+class IndexedDataset(Dataset):
+    def __init__(self, samples):
+        self.samples = tuple((str(path), label) for path, label in samples)
+        self.loader = imgread.Loader(path for path, _ in self.samples)
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, index):
+        return numpy_to_tensor(self.loader[index]), self.samples[index][1]
+
+
+class BufferDataset(Dataset):
+    def __init__(self, samples):
+        self.samples = tuple(samples)
+        self.loader = imgread.Loader()
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, index):
+        data, label = self.samples[index]
+        return numpy_to_tensor(self.loader.decode(data)), label
 
 
 def thread_limits(_worker_id):
