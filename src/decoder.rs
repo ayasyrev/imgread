@@ -82,8 +82,9 @@ impl DecoderWorkspace {
             input: crate::input_buffer::ReusableInput::new(cap),
             native: NativeWorkspace {
                 #[cfg(feature = "turbojpeg")]
+                slot: crate::turbo_backend::NativeSlot::default(),
+                #[cfg(feature = "turbojpeg")]
                 reuse: _reuse_native,
-                ..NativeWorkspace::default()
             },
         }
     }
