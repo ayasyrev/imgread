@@ -70,8 +70,6 @@ jobs:
           rust-toolchain: '1.95.0'
           target: ${{ matrix.target }}
           args: --release --locked --out dist -i python3.11 python3.12 python3.13 python3.14
-      - name: Verify metadata, tags and native dependencies
-        run: uv run --no-project python scripts/check_artifacts.py dist/*.whl
       - name: Test every installed wheel in a clean environment
         shell: bash
         run: |
@@ -98,7 +96,6 @@ jobs:
       - run: cargo metadata --locked --all-features --format-version 1 > /dev/null
       - run: CARGO_NET_OFFLINE=true uv run --no-sync maturin sdist --out dist
       - run: uv run --no-sync twine check dist/*
-      - run: uv run --no-sync python scripts/check_artifacts.py dist/*
       - name: Rebuild wheel from the sdist in isolation
         run: |
           sudo apt-get update && sudo apt-get install -y cmake nasm

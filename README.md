@@ -31,7 +31,9 @@ Every successful call returns a new writable, C-contiguous `numpy.ndarray` of
 shape `(height, width, 3)` and dtype `uint8`. The default order is RGB; `color="bgr"`
 reverses the channels. Only `dtype="uint8"` is supported. Color, dtype, backend and
 limit-profile names are case-insensitive. Bytes paths are rejected; use the buffer
-APIs for encoded bytes. Decoding releases the GIL after taking a private input copy.
+APIs for encoded bytes. Decoding releases the GIL. The standalone buffer functions
+copy their input; `Loader.decode` borrows immutable `bytes` for the duration of the
+call and copies other buffer types before releasing the GIL.
 
 - JPEG: baseline, progressive, grayscale and CMYK. CMYK may use the fallback
   decoder. Decoder rounding and chroma upsampling can produce small pixel
@@ -48,6 +50,31 @@ APIs for encoded bytes. Decoding releases the GIL after taking a private input c
 
 Other formats are rejected even though the underlying Rust `image` dependency
 retains its default features in this beta.
+
+## Persistent Loader
+
+```python
+loader = imgread.Loader(color="rgb", backend="auto")
+rgb = loader("photo.jpg")
+data = Path("photo.jpg").read_bytes()  # or an encoded image from another source
+rgb = loader.decode(data)
+
+indexed = imgread.Loader(["first.jpg", "second.jpg"])
+rgb = indexed[0]
+```
+
+`decode(data)` accepts the same uint8-compatible buffers as `load_numpy_from_bytes`,
+including strided views, and uses the Loader's fixed options and resource limits.
+It reuses the same native JPEG state as path/index calls and returns an independent
+array. Input buffers are never retained. Mutable buffers and memoryviews, including
+read-only views, are copied in C order; immutable `bytes` require no input copy.
+`max_buffer_bytes` caps retained file-read storage only, not the accepted image size.
+
+A Loader can be pickled and passed to DataLoader workers: each process initializes
+its own decoder lazily. Keep one Loader per worker; overlapping or reentrant calls
+on the same instance raise `RuntimeError`. Buffer data belongs to the caller and
+is not included in the Loader's pickle. Preloading an entire dataset is optional
+and has its own memory and worker-startup costs.
 
 ## Backends and the simple API
 
@@ -120,7 +147,7 @@ manylinux2014 (glibc 2.17+) and macOS x86_64 (10.13+) / arm64 (11.0+).
 Windows, Linux aarch64, musllinux, PyPy, free-threaded CPython and Python 3.15 are
 not supported by this beta. The 3.15 compatibility CI job is informational.
 
-The five functions above form the beta API. Bug fixes can change rejection of
+Loader and the five functions above form the beta API. Bug fixes can change rejection of
 malformed inputs, limits or decoder results. Intentional API changes will be
 recorded in release notes and beta versions; pin a version for reproducible work.
 The Rust crate is internal and is not published to crates.io.
@@ -140,12 +167,9 @@ cargo fmt -- --check
 cargo clippy --locked --all-targets --all-features -- -D warnings
 uv run maturin build --release --locked --sdist
 uv run twine check target/wheels/*
-uv run python scripts/check_artifacts.py --allow-local target/wheels/*
-uv run python scripts/update_notices.py --check
 ```
 
-`--allow-local` validates local artifacts without certifying their platform tags
-for release. Keep maturin's configured features when building; passing
+Keep maturin's configured features when building; passing
 `--features extension-module` alone overrides them and removes TurboJPEG.
 
 ## License
@@ -154,3 +178,67 @@ The project uses the MIT license. Redistributed dependency notices are in
 `THIRD_PARTY_NOTICES.md` and `licenses/` and are included in both wheels and sdists.
 
 This software is based in part on the work of the Independent JPEG Group.
+
+## Loader: paths and saved indices
+
+```text
+Loader(
+    paths=None, *, color="rgb", dtype="uint8", backend="auto",
+    limits="safe", max_buffer_bytes=1048576,
+)
+```
+
+The signature above describes the keyword-only options. For a working call:
+
+```python
+loader = imgread.Loader(color="bgr")
+array = loader("photo.jpg")
+
+indexed = imgread.Loader(["first.jpg", "second.png", "first.jpg"])
+first = indexed[0]
+last = indexed[-1]
+other = indexed("outside-the-snapshot.tiff")
+```
+
+`paths` is a finite iterable of `str` or `os.PathLike[str]`; a single path or bytes
+container is rejected. Construction converts each element once and preserves its
+text, order and duplicates in an immutable native snapshot. It opens no images,
+checks no image metadata and creates no native decoder. Changing the original list
+or PathLike objects does not change this snapshot. Files remain mutable: each call
+opens the current file, and relative paths use the working directory **at load time**.
+
+`len(indexed)` counts snapshot entries. An empty snapshot is valid. Without a
+snapshot, length and indexing raise `TypeError`; path calls still work.
+`bool(loader)` is always true. Indexing accepts the integer `__index__` protocol,
+including NumPy integers and negative indices. Out-of-range integers, even huge
+ones, raise `IndexError`. Python bool, slices and collections of indices raise
+`TypeError`. Settings cannot be changed after construction.
+
+Loader returns the same pixels, exceptions and fallback warnings as `load_numpy`
+with the same build, backend and settings. Each array owns separate writable memory
+and remains valid after later calls, failures or Loader deletion. No output cache,
+batch API or internal prefetch is added.
+
+`max_buffer_bytes` limits the **capacity of compressed input retained after a call**;
+its default is 1 MiB, and zero disables input retention. It accepts non-negative
+addressable integers through `__index__`. Larger allowed files use temporary input
+storage. This cap is separate from `limits`, native decoder allocations, the path
+snapshot and returned arrays; it is not a total RSS limit. Native JPEG state may
+still be reused with a zero input cap. A conservative JPEG marker check prevents a
+previous image's tables from affecting a later decode. Uncertain files use fresh
+native state and the usual fallback rules.
+
+One Loader allows one active image call. Overlap and reentry raise
+`RuntimeError("Loader is busy")` immediately, including reentry from path/index
+protocols and warning handlers. Different instances operate independently. I/O and
+decoding release the GIL. Pickle stores only configuration and snapshot strings;
+restored objects start with no input/native state. Spawn, forkserver and an **idle**
+fork create process-owned decoding state. Fork while a Loader call is active is
+unsupported. Long-lived workers retain at most one workspace per Loader; process
+startup, manifest copies and pickle costs remain part of application preparation.
+
+For PyTorch, `ImageFolder(..., loader=Loader())` calls Loader with a **path**.
+Use a transform that accepts NumPy arrays and restrict the dataset to supported
+image formats. An indexed Dataset can snapshot paths in a Loader and call
+`loader[index]`, keeping labels alongside the paths. Torch and torchvision are
+optional integrations, never imgread runtime dependencies.

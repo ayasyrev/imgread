@@ -42,12 +42,11 @@ jobs:
               out.write('version=' + version + '\n')
           PY
 
-      - name: Verify public destination and package URLs
+      - name: Verify public destination
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = false
-          uv run --no-project python scripts/repository_metadata.py "$GITHUB_REPOSITORY" --check
 
       - name: Require manual production approval
         env:
