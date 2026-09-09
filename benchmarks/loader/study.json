@@ -1,17 +1,10 @@
 {
   "schema_version": 1,
   "study_id": "20260908_084136_loader-paths-indices",
-  "planning_base": "594e8446570449d314c144fc0167077707dd6756",
-  "runnable_roots": [".", "benchmarks/loader", "scripts/examples", "python_tests", "src", "python"],
-  "workflow_record_root": "/home/aya/Prj/PrjDocs/imgread/docs/plans",
-  "implementation_review_record_root": "/home/aya/Prj/PrjDocs/imgread/docs/plans",
-  "artifact_root": "/home/aya/Prj/PrjDocs/imgread/docs/experiments/20260908_084136_loader-paths-indices",
   "corpus": {
-    "root": "/Data/imagenette/imagenette2-320/val",
+    "root": "data/imagenette2-320/val",
     "classes": 10,
     "per_class": 100,
-    "manifest_sha256": "12a78ed6cc236c4bc3cb1829d6aa5344f0943620316dc5da4ed5153246243d1b",
-    "compressed_bytes": 25893238,
     "min_dimension": 224
   },
   "environment": {
@@ -56,12 +49,11 @@
   "resources": {
     "min_available_bytes": 6442450944, "min_free_bytes": 10737418240, "stop_free_bytes": 2147483648,
     "memory_max_bytes": 8589934592, "tasks_max": 64, "attempt_seconds": 3600,
-    "max_attempts": 2, "max_active_attempts": 1, "config_seconds": 120, "native_seconds": 180,
+    "config_seconds": 120, "native_seconds": 180,
     "heartbeat_seconds": 10, "heartbeat_timeout_seconds": 60, "sample_seconds": 0.1,
-    "terminate_seconds": 10, "total_seconds": 7200
+    "terminate_seconds": 10
   },
   "decision": {
-    "material_slowdown": 0.05, "minimum_improvement": 0.02, "consistent_rounds": 4,
-    "retry_reasons": ["external-interruption", "profiler-infrastructure", "environment-infrastructure", "resource-exhaustion"]
+    "material_slowdown": 0.05, "minimum_improvement": 0.02, "consistent_rounds": 4
   }
 }

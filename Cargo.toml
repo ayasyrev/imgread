@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.88"
 publish = false
 include = [
-    "/build.rs", "/src/**", "/Cargo.toml", "/Cargo.lock", "/pyproject.toml", "/uv.lock", "/python/**",
+    "/src/**", "/Cargo.toml", "/Cargo.lock", "/pyproject.toml", "/uv.lock", "/python/**",
     "/README.md", "/LICENSE", "/THIRD_PARTY_NOTICES.md", "/licenses/**",
     "/tests/**", "/python_tests/**", "/scripts/**", "/about.toml", "/about.hbs", "/deny.toml",
 ]

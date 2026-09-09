@@ -223,4 +223,4 @@ never imgread runtime dependencies.
 
 The isolated [Loader study](benchmarks/loader/README.md) compares functional, path
 and indexed calls with equal work and reports startup and memory separately.
-No numeric speedup is promised before the reviewed study has completed.
+Performance measurements describe the tested corpus, hardware and pipeline.

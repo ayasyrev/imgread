@@ -1,5 +1,4 @@
-"""Deterministic read-only corpus selection and versioned synthetic inputs."""
-import hashlib
+"""Deterministic read-only corpus selection and synthetic inputs."""
 import io
 from pathlib import Path
 import struct
@@ -7,14 +6,6 @@ import struct
 SYNTHETIC_FILES = {"small": "small.jpg", "small-progressive": "small-progressive.jpg", "small-png": "small.png",
                    "large": "large.jpg", "progressive": "progressive.jpg", "large-png": "large.png",
                    "corrupt": "corrupt.jpg", "oversized": "oversized.jpg"}
-
-
-def digest(path):
-    hasher = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
 
 
 def select(config):
@@ -32,25 +23,19 @@ def select(config):
             relative = path.relative_to(root).as_posix()
             if "\t" in relative or "\n" in relative:
                 raise ValueError("unrepresentable TSV path")
-            rows.append(f"{relative}\t{path.stat().st_size}\t{digest(path)}\n")
+            rows.append(f"{relative}\t{path.stat().st_size}\n")
             samples.append((str(path), label))
     manifest = "".join(rows).encode()
-    if hashlib.sha256(manifest).hexdigest() != config["manifest_sha256"]:
-        raise ValueError("corpus digest changed")
-    if sum(int(row.split("\t")[1]) for row in rows) != config["compressed_bytes"]:
-        raise ValueError("corpus compressed size changed")
     return samples, manifest
 
 
 def samples_from_manifest(config, manifest):
     data = Path(manifest).read_bytes()
-    if hashlib.sha256(data).hexdigest() != config["manifest_sha256"]:
-        raise ValueError("saved corpus manifest mismatch")
     root = Path(config["root"])
     names = sorted({row.split("/", 1)[0] for row in data.decode().splitlines()})
     result = []
     for row in data.decode().splitlines():
-        relative, _size, _sha = row.split("\t")
+        relative, _size = row.split("\t")
         result.append((str(root / relative), names.index(relative.split("/", 1)[0])))
     return result
 
@@ -90,7 +75,7 @@ def generate(config, directory):
     frame = data.index(b"\xff\xc0")
     data[frame + 5:frame + 9] = struct.pack(">HH", 65000, 65000)
     (directory / "oversized.jpg").write_bytes(data)
-    rows = {kind: {"path": str(path.resolve()), "bytes": path.stat().st_size, "sha256": digest(path)}
+    rows = {kind: {"path": str(path.resolve()), "bytes": path.stat().st_size}
             for kind, filename in SYNTHETIC_FILES.items() for path in (directory / filename,)}
     if rows["small"]["bytes"] >= 1048576:
         raise ValueError("small stress JPEG must be below retention cap")

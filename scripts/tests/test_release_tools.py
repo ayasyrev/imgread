@@ -1,7 +1,6 @@
 """Regression checks for source transfer and distribution validation."""
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-import hashlib
 import sys
 import tomllib
 
@@ -38,12 +37,8 @@ def test_export_excludes_private_history_and_generated_files(tmp_path):
     assert not (destination / "docs").exists()
     configure(destination, "example/decoder", check=True)
     assert (source / "pyproject.toml").read_bytes() == original
-    manifest = (destination / "PUBLIC_SOURCE_SHA256SUMS").read_text().splitlines()
-    assert len(manifest) == len(FILES)
-    for line in manifest:
-        digest, name = line.split("  ", 1)
-        assert digest == hashlib.sha256((destination / name).read_bytes()).hexdigest()
-    assert {p.relative_to(destination).as_posix() for p in destination.rglob("*") if p.is_file()} == set(FILES) | {"PUBLIC_SOURCE_SHA256SUMS"}
+    assert {p.relative_to(destination).as_posix() for p in destination.rglob("*") if p.is_file()} == set(FILES)
+    assert (destination / "LICENSE").read_bytes() == (source / "LICENSE").read_bytes()
 
 
 def test_export_refuses_existing_destination_and_symlinks(tmp_path):

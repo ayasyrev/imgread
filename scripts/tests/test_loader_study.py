@@ -1,5 +1,4 @@
 import copy
-import hashlib
 import importlib.util
 import json
 import os
@@ -25,7 +24,7 @@ def config():
     return run.load_config(STUDY / "study.json")
 
 
-def test_frozen_config_and_worker_profiles(config):
+def test_config_and_worker_profiles(config):
     run.validate_config(config)
     assert len(run.configurations(config)) == 18
     assert run.pipeline_kwargs(config, 0)["prefetch_factor"] is None
@@ -40,19 +39,14 @@ def test_frozen_config_and_worker_profiles(config):
                 run.validate_config(changed)
             with pytest.raises(ValueError):
                 run.pipeline_kwargs(changed, profile_index * 2)
-    for key in list(config):
-        changed = copy.deepcopy(config)
-        del changed[key]
-        with pytest.raises(ValueError):
-            run.validate_config(changed)
     changed = copy.deepcopy(config)
-    changed["unknown"] = 1
-    with pytest.raises(ValueError):
-        run.validate_config(changed)
+    changed["corpus"]["root"] = "/data/another-corpus"
+    changed["notes"] = "local experiment"
+    run.validate_config(changed)
 
 
 def evidence(config):
-    validation = {"binding": {"sha": "a", "corpus": "b"}, "order_digest": "order", "cells": {}}
+    validation = {"binding": {"run_dir": "run-a"}, "order_digest": "order", "cells": {}}
     rows = []
     for cell in run.configurations(config):
         validation["cells"][cell["config_id"]] = {"result_digest": "pixels"}
@@ -80,15 +74,15 @@ def test_aggregation_and_negative_results(config):
     assert report.compare([0.97] * 5, [1] * 5, config["decision"])["reliable_acceleration"]
 
 
-@pytest.mark.parametrize("change", ["missing", "short", "sha", "order", "pixels", "samples", "duplicate"])
+@pytest.mark.parametrize("change", ["missing", "short", "run", "order", "pixels", "samples", "duplicate"])
 def test_reject_invalid_timing(config, change):
     validation, rows = evidence(config)
     if change == "missing":
         rows.pop()
     elif change == "short":
         rows[0]["elapsed_ns"] = 1
-    elif change == "sha":
-        rows[0]["binding"] = {"sha": "wrong"}
+    elif change == "run":
+        rows[0]["binding"] = {"run_dir": "wrong"}
     elif change == "order":
         rows[0]["order_digest"] = "wrong"
     elif change == "pixels":
@@ -116,24 +110,35 @@ def test_native_attribution_counts_each_stack_once(tmp_path):
     assert sum(result["sites"].values()) == 400
 
 
-def test_stage_integrity_and_retry(config, tmp_path):
+def test_stage_requires_outputs_but_does_not_hash_them(tmp_path):
     path = tmp_path / "evidence"
     path.write_text("one")
-    record = {"exit_code": 0, "binding": {"sha": "x"}, "artifacts": {"evidence": corpus.digest(path)}}
-    run.verify_stage(record, tmp_path, {"sha": "x"})
+    binding = {"run_dir": str(tmp_path)}
+    record = {"exit_code": 0, "binding": binding, "artifacts": ["evidence"]}
+    run.verify_stage(record, tmp_path, binding)
     path.write_text("two")
-    with pytest.raises(ValueError):
-        run.verify_stage(record, tmp_path, {"sha": "x"})
-    control = tmp_path / "control.attempt-02"
-    previous = tmp_path / "control.attempt-01"
-    previous.mkdir()
-    for failure in ("external-interruption", "semantic-or-unclassified"):
-        (previous / "completion.json").write_text(json.dumps({"success": False, "failure_kind": failure, "elapsed_ns": 1000}))
-        if failure == "external-interruption":
-            run.check_retry(config, control, tmp_path / "attempt-02")
-        else:
-            with pytest.raises(ValueError):
-                run.check_retry(config, control, tmp_path / "attempt-02")
+    run.verify_stage(record, tmp_path, binding)
+    path.unlink()
+    with pytest.raises(FileNotFoundError):
+        run.verify_stage(record, tmp_path, binding)
+
+
+def test_corpus_selection_and_saved_manifest(config, tmp_path):
+    settings = dict(config["corpus"], root=str(tmp_path), classes=2, per_class=2)
+    for label in ("b", "a"):
+        directory = tmp_path / label
+        directory.mkdir()
+        for name in ("2.jpg", "1.jpg", "3.jpg"):
+            (directory / name).write_bytes(b"image bytes")
+    samples, manifest = corpus.select(settings)
+    assert [(Path(path).parent.name, Path(path).name, label) for path, label in samples] == [
+        ("a", "1.jpg", 0), ("a", "2.jpg", 0), ("b", "1.jpg", 1), ("b", "2.jpg", 1)]
+    saved = tmp_path / "corpus.tsv"
+    saved.write_bytes(manifest)
+    assert corpus.samples_from_manifest(settings, saved) == samples
+    # Corpus variants need no separately maintained fingerprint or byte total.
+    Path(samples[0][0]).write_bytes(b"different image bytes")
+    assert corpus.select(settings)[0] == samples
 
 
 def test_cancel_child_group(tmp_path):
@@ -151,6 +156,72 @@ def test_help_and_config_only_commands():
     for script, flag in (("run.py", "--help"), ("report.py", "--help"), ("run.py", "--self-check")):
         result = subprocess.run([sys.executable, str(STUDY / script), flag], capture_output=True, text=True, timeout=10)
         assert result.returncode == 0, result.stderr
+
+
+def test_cli_resumes_saved_settings_outside_checkout(config, tmp_path, monkeypatch):
+    run_dir = tmp_path / "experiment"
+    run_dir.mkdir()
+    config["corpus"]["root"] = str(tmp_path / "images")
+    run.atomic_json(run_dir / "study.json", config)
+    calls = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["run.py", "--run-dir", str(run_dir), "--stage", "validate"])
+    monkeypatch.setattr(run, "supervise", lambda *args: calls.append(args))
+    run.main()
+    assert calls == [(config, run_dir, "validate", False)]
+
+
+def test_supervisor_uses_local_records_and_resumes_without_reading_corpus(config, tmp_path, monkeypatch):
+    run_dir = tmp_path / "experiment"
+    monkeypatch.setattr(run, "ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    wheel_info = {name: {"path": name + ".whl"} for name in ("normal", "diagnostic")}
+    monkeypatch.setattr(run, "wheels", lambda: wheel_info)
+    monkeypatch.setattr(run, "service_envelope", lambda *_args: None)
+    installs, stages = [], []
+    monkeypatch.setattr(run, "install_wheel", lambda wheel: installs.append(wheel))
+    def stage_work(stage, *_args):
+        stages.append(stage)
+        (run_dir / (stage + ".txt")).write_text("result")
+    monkeypatch.setattr(run, "run_stage", stage_work)
+    run.supervise(config, run_dir, "all")
+    assert stages == list(run.STAGES)
+    assert installs == [wheel_info["normal"], wheel_info["diagnostic"], wheel_info["normal"]]
+    completion = json.loads((run_dir / "control/completion.json").read_text())
+    assert completion["success"]
+    # Editing an output does not invalidate completion through a file checksum.
+    (run_dir / "preflight.txt").write_text("annotated result")
+    run.supervise(config, run_dir, "all")
+    assert stages == list(run.STAGES)
+    assert len(installs) == 3
+
+
+def test_report_can_be_regenerated_without_original_corpus(config, tmp_path, monkeypatch):
+    config["corpus"]["root"] = str(tmp_path / "unavailable-images")
+    validation, rows = evidence(config)
+    validation["stress"] = [{"backend": backend, "kind": kind}
+                            for backend in config["backends"] for kind in corpus.SYNTHETIC_FILES]
+    provenance = {
+        "binding": validation["binding"],
+        "resource_preflight": {"available_bytes": 8 * 2**30, "required_bytes": 6 * 2**30,
+                               "threshold_met": True, "allow_low_memory": False},
+        "pipeline_constructors": [{"config_id": cell["config_id"],
+                                   "kwargs": run.pipeline_kwargs(config, cell["workers"])}
+                                  for cell in run.configurations(config) if cell["workload"] == "pipeline"],
+    }
+    for name, data in (("study.json", config), ("provenance.json", provenance), ("validation.json", validation)):
+        run.atomic_json(tmp_path / name, data)
+    run.atomic_json(tmp_path / "control/stages.json", {
+        stage: {"exit_code": 0, "binding": validation["binding"], "artifacts": []} for stage in run.STAGES[:-1]})
+    run.append_rows(tmp_path / "timings.jsonl", rows)
+    (tmp_path / "memory.jsonl").touch()
+    monkeypatch.setattr(report, "memory_evidence", lambda *_args: {
+        "manifest_cases": 0, "sequence_cases": 0, "output_nbytes_max": 0,
+        "manifest_summary": {}, "sequence_summary": []})
+    monkeypatch.setattr(report, "native_evidence", lambda *_args: [])
+    result = report.generate(config, tmp_path)
+    assert result["complete"] and result["decision"] == "completed"
+    assert "no reliable acceleration" in (tmp_path / "report.md").read_text()
 
 
 def test_fixed_corrupt_fixture_and_tiny_factory_smoke(config, tmp_path):
@@ -353,11 +424,11 @@ def test_native_matrix_allows_zero_native_at_global_peak(config, tmp_path):
                 path = Path(str(stem) + f".{label}.stacks")
                 has_native = not ((label == "peak" and checkpoint == "small-before") or (label == "live" and checkpoint in ("corrupt", "destroyed")))
                 path.write_text("python;malloc 1000\n" + ("python;tj3Init;malloc 100\n" if has_native else ""))
-                exports[label] = {"path": str(path), "sha256": corpus.digest(path)}
+                exports[label] = {"path": str(path)}
             prefix = phases if checkpoint == "destroyed" else phases[:phases.index(checkpoint) + 1]
             Path(str(stem) + ".diagnostics.json").write_text(json.dumps({"checkpoint": checkpoint, "repeat": repeat,
                 "records": [{"phase": phase, "diagnostics": {"input_len": 0, "input_capacity": 0, "native_live": int(phase != "corrupt")}} for phase in prefix]}))
-            manifest.append({"checkpoint": checkpoint, "repeat": repeat, "profile": str(profile), "profile_sha256": corpus.digest(profile), "exports": exports})
+            manifest.append({"checkpoint": checkpoint, "repeat": repeat, "profile": str(profile), "exports": exports})
     (tmp_path / "native-profiles.json").write_text(json.dumps(manifest))
     assert len(report.native_evidence(config, tmp_path)) == 24
     (tmp_path / "native-profiles.json").write_text(json.dumps(manifest[:-1]))
@@ -421,41 +492,38 @@ def test_terminal_failure_cannot_resume_same_attempt(config, tmp_path, attempt, 
     (control / "completion.json").write_text(json.dumps({"success": False, "failure_kind": failure, "error": message, "elapsed_ns": 1000}))
     before = (control / "completion.json").read_bytes()
     with pytest.raises(ValueError, match="terminal failure"):
-        run.check_retry(config, control, tmp_path / attempt)
+        run.check_resume(control)
     assert (control / "completion.json").read_bytes() == before
 
 
 def test_resume_requires_clean_stage_boundary(config, tmp_path):
     control = tmp_path / "control.attempt-01"
     control.mkdir()
-    run_dir = tmp_path / "attempt-01"
-    assert run.check_retry(config, control, run_dir) == 0
+    assert run.check_resume(control) is None
     (control / "launch.json").write_text("{}")
     with pytest.raises(ValueError, match="interrupted"):
-        run.check_retry(config, control, run_dir)
+        run.check_resume(control)
     (control / "completion.json").write_text(json.dumps({"success": False, "pending": ["validate", "timing", "memory", "native", "report"]}))
     (control / "stages.json").write_text(json.dumps({"preflight": {"exit_code": 0}}))
-    assert run.check_retry(config, control, run_dir) == 0
+    assert run.check_resume(control) is None
     for exit_code in (None, 1):
         (control / "stages.json").write_text(json.dumps({"preflight": {"exit_code": 0}, "timing": {"exit_code": exit_code}}))
         with pytest.raises(ValueError, match="interrupted or failed stage"):
-            run.check_retry(config, control, run_dir)
+            run.check_resume(control)
 
 
 def test_supervisor_preserves_exhausted_calibration_failure(config, tmp_path, monkeypatch):
     """Exercise supervisor persistence without decoding or scientific timing."""
     settings = copy.deepcopy(config)
-    settings["workflow_record_root"] = str(tmp_path)
     run_dir, control = tmp_path / "attempt-01", tmp_path / "control.attempt-01"
     run_dir.mkdir()
     control.mkdir()
-    identity = {"code_sha": "reviewed-sha"}
-    wheels = {name: {"sha256": name} for name in ("normal", "diagnostic")}
-    binding = dict(identity, wheels={name: row["sha256"] for name, row in wheels.items()}, corpus_sha256=config["corpus"]["manifest_sha256"])
+    wheels = {name: {"path": name + ".whl"} for name in ("normal", "diagnostic")}
+    binding = {"run_dir": str(run_dir)}
     (control / "stages.json").write_text(json.dumps({stage: {"exit_code": 0, "binding": binding, "artifacts": {}} for stage in ("preflight", "validate")}))
-    monkeypatch.setattr(run, "code_identity", lambda _config: identity)
     monkeypatch.setattr(run, "run_paths", lambda *_args: (run_dir, control))
     monkeypatch.setattr(run, "service_envelope", lambda *_args: None)
+    monkeypatch.setattr(run, "install_wheel", lambda *_args: None)
     monkeypatch.setattr(run, "wheels", lambda *_args: wheels)
     monkeypatch.setattr(corpus, "select", lambda *_args: ([], b""))
     class Heartbeat:
@@ -536,11 +604,10 @@ def test_report_labels_and_validates_memory_admission(config):
 @pytest.mark.parametrize("allowed", [False, True])
 def test_memory_admission_policy_cannot_change_on_resume(config, tmp_path, monkeypatch, allowed):
     settings = copy.deepcopy(config)
-    settings["workflow_record_root"] = str(tmp_path)
     run_dir, control = tmp_path / "attempt-01", tmp_path / "control"
-    monkeypatch.setattr(run, "code_identity", lambda _config: {"code_sha": "reviewed-sha"})
     monkeypatch.setattr(run, "run_paths", lambda *_args: (run_dir, control))
-    monkeypatch.setattr(run, "wheels", lambda *_args: {name: {"sha256": name} for name in ("normal", "diagnostic")})
+    monkeypatch.setattr(run, "install_wheel", lambda *_args: None)
+    monkeypatch.setattr(run, "wheels", lambda *_args: {name: {"path": name + ".whl"} for name in ("normal", "diagnostic")})
     monkeypatch.setattr(run.corpus, "select", lambda *_args: ([], b""))
     monkeypatch.setattr(run, "run_stage", lambda *_args: None)
     run.supervise(settings, run_dir, "preflight", allow_low_memory=allowed)

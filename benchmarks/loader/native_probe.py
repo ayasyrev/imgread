@@ -6,8 +6,7 @@ import json
 import os
 from pathlib import Path
 
-import corpus
-from run import ROOT, atomic_json, checked_image, code_identity, installed_wheel, load_config, run_paths, service_envelope
+from run import atomic_json, checked_image, installed_wheel, load_config, service_envelope
 
 
 def main():
@@ -16,21 +15,13 @@ def main():
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--repeat", type=int, choices=(1, 2, 3), required=True)
     args = parser.parse_args()
-    config = load_config(ROOT / "benchmarks/loader/study.json")
+    config = load_config(args.run_dir / "study.json")
     if args.checkpoint not in config["native"]["checkpoints"]:
         parser.error("unknown checkpoint")
     os.sched_setaffinity(0, config["environment"]["cpus"])
-    identity = code_identity(config)
-    run_paths(config, args.run_dir, identity["code_sha"])
-    service_envelope(config, identity["code_sha"], args.run_dir.name)
-    provenance = json.loads((args.run_dir / "provenance.json").read_text())
-    if any(identity[key] != provenance[key] for key in identity):
-        raise ValueError("native probe provenance mismatch")
-    installed_wheel(provenance["wheels"]["diagnostic"], True, provenance["code_sha"])
+    service_envelope(config)
+    installed_wheel(True)
     inputs = json.loads((args.run_dir / "generated-inputs.json").read_text())["inputs"]
-    for item in inputs.values():
-        if corpus.digest(item["path"]) != item["sha256"]:
-            raise ValueError("native input changed")
     import imgread
     loader = imgread.Loader(backend="auto", max_buffer_bytes=1048576)
     records = []

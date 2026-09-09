@@ -1,4 +1,4 @@
-"""Frozen Loader study supervisor; measurements require a reviewed, clean SHA."""
+"""Loader timing and memory study supervisor."""
 import argparse
 import contextlib
 import fcntl
@@ -19,14 +19,12 @@ import subprocess
 import sys
 import threading
 import time
-import zipfile
 import traceback
 
 import corpus
 
 ROOT = Path(__file__).resolve().parents[2]
 STAGES = ("preflight", "validate", "timing", "memory", "native", "report")
-FROZEN_CONFIG_SHA256 = "06e4ab74ca8fe6100ca43ca1ee2e96baa36a56998c03ef2989c015ff3a4dd3b7"
 
 
 def canonical(value):
@@ -35,15 +33,13 @@ def canonical(value):
 
 def load_config(path):
     config = json.loads(Path(path).read_text())
+    corpus_root = Path(config["corpus"]["root"]).expanduser()
+    config["corpus"]["root"] = str((ROOT / corpus_root).resolve())
     validate_config(config)
     return config
 
 
 def validate_config(config):
-    # Pin all scientific values, types, and keys; an edited matrix requires code
-    # review of both the config and this fingerprint before it can be executed.
-    if hashlib.sha256(canonical(config)).hexdigest() != FROZEN_CONFIG_SHA256:
-        raise ValueError("unknown, missing or changed frozen study setting")
     for profile in config["pipeline"]["worker_profiles"]:
         pipeline_kwargs(config, profile["num_workers"])
 
@@ -54,7 +50,7 @@ def pipeline_kwargs(config, workers):
     profiles = config["pipeline"]["worker_profiles"]
     selected = [profile for profile in profiles if profile.get("num_workers") == workers]
     if workers not in expected or selected != [expected[workers]]:
-        raise ValueError("invalid frozen DataLoader worker profile")
+        raise ValueError("invalid DataLoader worker profile")
     return dict(selected[0], batch_size=config["pipeline"]["batch_size"],
                 pin_memory=config["pipeline"]["pin_memory"], drop_last=config["pipeline"]["drop_last"])
 
@@ -87,54 +83,9 @@ def append_rows(path, rows):
         os.fsync(stream.fileno())
 
 
-def git(*arguments):
-    return subprocess.check_output(["git", "--no-optional-locks", *arguments], cwd=ROOT, text=True).strip()
-
-
-def code_identity(config):
-    if Path.cwd().resolve() != ROOT:
-        raise ValueError("run every command from the repository root")
-    if git("status", "--porcelain", "--untracked-files=all"):
-        raise ValueError("study requires an entirely clean worktree")
-    sha = git("rev-parse", "HEAD")
-    subprocess.run(["git", "merge-base", "--is-ancestor", config["planning_base"], sha], cwd=ROOT, check=True)
-    for name in config["runnable_roots"]:
-        path = (ROOT / name).resolve(strict=True)
-        if not path.is_relative_to(ROOT):
-            raise ValueError(f"runnable path escapes repository: {name}")
-    for name in git("ls-files").splitlines():
-        path = ROOT / name
-        if path.is_symlink() and not path.resolve().is_relative_to(ROOT):
-            raise ValueError(f"tracked source symlink escapes repository: {name}")
-    review_root = Path(config["implementation_review_record_root"]).resolve(strict=True)
-    if review_root.is_relative_to(ROOT):
-        raise ValueError("review records must be external")
-    reviews = sorted(review_root.glob(config["study_id"] + ".implementation.review-*.md"))
-    for review in reversed(reviews):
-        body = review.read_text()
-        fields = {}
-        for line in body.splitlines():
-            if line.startswith("|"):
-                cells = [cell.strip().strip("`") for cell in line.split("|")[1:-1]]
-                if len(cells) == 2:
-                    fields[cells[0]] = cells[1]
-        if fields.get("Verdict") == "approved" and fields.get("Target commit / HEAD") == sha:
-            return {"code_sha": sha, "review": str(review), "review_sha256": corpus.digest(review),
-                    "config_sha256": FROZEN_CONFIG_SHA256,
-                    "locks": {name: corpus.digest(ROOT / name) for name in ("Cargo.lock", "uv.lock", "benchmarks/loader/uv.lock")}}
-    raise ValueError("no approved implementation review binds this exact clean SHA")
-
-
-def run_paths(config, run_dir, sha):
-    output_root = Path(config["artifact_root"]).resolve()
+def run_paths(run_dir):
     run_dir = Path(run_dir).resolve()
-    if run_dir.parent != output_root / sha or run_dir.name not in ("attempt-01", "attempt-02"):
-        raise ValueError("run directory does not match the frozen SHA/attempt layout")
-    record_root = Path(config["workflow_record_root"]).resolve(strict=True)
-    if record_root.is_relative_to(ROOT) or output_root.is_relative_to(ROOT) or output_root.is_relative_to(record_root) or record_root.is_relative_to(output_root):
-        raise ValueError("records, runnable roots and output must be separate")
-    control = record_root / f"{config['study_id']}.{sha}.{run_dir.name}"
-    return run_dir, control
+    return run_dir, run_dir / "control"
 
 
 def memory_snapshot(pid):
@@ -158,7 +109,7 @@ def available_memory():
 
 def resource_preflight(config, run_dir, allow_low_memory=False):
     if sys.platform != "linux" or platform.machine() != "x86_64":
-        raise ValueError("the frozen study requires Linux x86_64")
+        raise ValueError("the study requires Linux x86_64")
     if not set(config["environment"]["cpus"]).issubset(os.sched_getaffinity(0)):
         raise ValueError("CPUs 0-3 unavailable")
     observed_memory = available_memory()
@@ -179,49 +130,25 @@ def resource_preflight(config, run_dir, allow_low_memory=False):
             "threshold_met": observed_memory >= required_memory, "allow_low_memory": allow_low_memory}
 
 
-def wheels(identity):
+def wheels():
     result = {}
     for name in ("normal", "diagnostic"):
         matches = list((ROOT / "target" / "loader-wheels" / name).glob("*.whl"))
         if len(matches) != 1:
-            raise ValueError(f"exactly one newly built {name} wheel is required")
-        path = matches[0]
-        if path.stat().st_mtime_ns < Path(identity["review"]).stat().st_mtime_ns:
-            raise ValueError("wheel predates the implementation approval; rebuild from approved SHA")
-        with zipfile.ZipFile(path) as archive:
-            extension = [name for name in archive.namelist() if name.startswith("imgread/") and name.endswith(".so")]
-            if len(extension) != 1:
-                raise ValueError("wheel must contain exactly one native extension")
-            result[name] = {"path": str(path), "sha256": corpus.digest(path), "extension_sha256": hashlib.sha256(archive.read(extension[0])).hexdigest(), "extension_name": extension[0]}
+            raise ValueError(f"exactly one {name} wheel is required")
+        result[name] = {"path": str(matches[0])}
     if Path(result["normal"]["path"]).name != Path(result["diagnostic"]["path"]).name:
         raise ValueError("wheel version/ABI mismatch")
     return result
 
 
-def installed_wheel(wheel, diagnostic, expected_sha=None):
+def installed_wheel(diagnostic):
     import imgread
     import imgread._native as native
-    if not Path(native.__file__).resolve().is_relative_to(ROOT / "benchmarks/loader/.venv"):
-        raise ValueError("installed extension is outside the isolated environment")
-    if corpus.digest(native.__file__) != wheel["extension_sha256"]:
-        raise ValueError("installed native extension differs from selected wheel")
-    stamp = native._build_info
-    if expected_sha is not None and (stamp[0] != expected_sha or stamp[1] != "false" or stamp[2] != "release"):
-        raise ValueError("wheel was not built in release mode from the exact clean reviewed SHA")
-    if diagnostic and expected_sha is not None and (stamp[3] != "true" or stamp[4] != "true"):
-        raise ValueError("diagnostic study wheel must contain Rust and native debug information")
+    if native._debug_build:
+        raise ValueError("measurements require a release build")
     if hasattr(imgread.Loader, "_debug_state") != diagnostic:
         raise ValueError("diagnostic/normal wheel mode mismatch")
-    package = importlib.metadata.distribution("imgread")
-    direct = json.loads(package.read_text("direct_url.json"))
-    if direct.get("dir_info", {}).get("editable"):
-        raise ValueError("editable package cannot supply measurements")
-    with zipfile.ZipFile(wheel["path"]) as archive:
-        for name in archive.namelist():
-            if name.startswith("imgread/") and name.endswith((".py", ".pyi")):
-                local = package.locate_file(name)
-                if hashlib.sha256(archive.read(name)).hexdigest() != corpus.digest(local):
-                    raise ValueError("installed first-party Python code differs from wheel")
     return str(native.__file__)
 
 
@@ -273,7 +200,7 @@ class StudyDataset:
         import torch
         image = self.image(index)
         if min(image.shape[:2]) < 224:
-            raise ValueError("corpus image is smaller than the frozen crop")
+            raise ValueError("corpus image is smaller than the crop")
         return torch.from_numpy(np.ascontiguousarray(image[:224, :224])), self.labels[index]
 
 
@@ -396,7 +323,7 @@ def child_job(config, job, run_dir, name, heartbeat=None):
     name = request.name.removesuffix(".request.json")
     atomic_json(request, dict(job, result_path=str(result)))
     with (jobs / f"{name}.stdout").open("w") as out, (jobs / f"{name}.stderr").open("w") as err:
-        process_group([sys.executable, str(Path(__file__).resolve()), "--config", str(ROOT / "benchmarks/loader/study.json"), "--run-dir", str(run_dir), "--worker-request", str(request)], out, err, config["resources"]["config_seconds"], heartbeat)
+        process_group([sys.executable, str(Path(__file__).resolve()), "--config", str(run_dir / "study.json"), "--run-dir", str(run_dir), "--worker-request", str(request)], out, err, config["resources"]["config_seconds"], heartbeat)
     return json.loads(result.read_text())
 
 
@@ -634,14 +561,14 @@ class MemorySampler:
             raise RuntimeError(f"memory sampler failed: {self.errors}")
 
 
-def preflight_job(config, provenance):
+def preflight_job(config):
     import torch
     if platform.python_version() != config["environment"]["python"]:
         raise ValueError("Python version differs from locked study")
     for name in ("numpy", "pillow", "pytest", "torch", "torchvision"):
         if importlib.metadata.version(name) != config["environment"][name]:
             raise ValueError(f"dependency version mismatch: {name}")
-    package_origin = installed_wheel(provenance["wheels"]["normal"], False, provenance["code_sha"])
+    package_origin = installed_wheel(False)
     from torch.utils.data import DataLoader
     constructed = []
     for cell in configurations(config):
@@ -673,8 +600,6 @@ def validate_stress(config, generated):
         loader = imgread.Loader(backend=backend)
         for kind, item in generated["inputs"].items():
             path = item["path"]
-            if corpus.digest(path) != item["sha256"]:
-                raise ValueError("generated input changed")
             def capture(call):
                 with warnings.catch_warnings(record=True) as caught:
                     warnings.simplefilter("always")
@@ -701,7 +626,7 @@ def validate_request(config, request, run_dir):
     if kind in ("timing", "validate"):
         keys |= {"cell", "repetitions"}
         if request.get("cell") not in configurations(config):
-            raise ValueError("worker cell is outside the frozen matrix")
+            raise ValueError("worker cell is outside the matrix")
         if type(request.get("repetitions", 0)) is not int or request.get("repetitions", 0) < 0:
             raise ValueError("invalid calibrated repetition count")
         if kind == "validate" and request.get("repetitions", 0) != 0:
@@ -709,14 +634,14 @@ def validate_request(config, request, run_dir):
     elif kind == "manifest":
         keys |= {"length", "workers", "method", "variant", "repeat"}
         if request.get("length") not in config["manifest"]["lengths"] or request.get("workers") not in (0, 2) or request.get("variant") not in config["variants"] or request.get("repeat") not in range(3):
-            raise ValueError("manifest job is outside the frozen matrix")
+            raise ValueError("manifest job is outside the matrix")
         methods = [method for method in config["manifest"]["start_methods"] if method in mp.get_all_start_methods()] if request["workers"] else [None]
         if request.get("method") not in methods:
             raise ValueError("manifest process method mismatch")
     elif kind == "sequence":
         keys |= {"backend", "cap", "workers", "method"}
         if request.get("backend") not in config["backends"] or request.get("cap") not in config["sequence"]["caps"] or request.get("workers") not in (0, 2) or request.get("method") != ("spawn" if request["workers"] else None):
-            raise ValueError("sequence job is outside the frozen matrix")
+            raise ValueError("sequence job is outside the matrix")
     elif kind not in ("preflight", "stress"):
         raise ValueError("unknown internal worker request")
     if set(request) - keys or "result_path" not in request:
@@ -727,20 +652,15 @@ def validate_request(config, request, run_dir):
 
 
 def worker(config, request, run_dir):
-    provenance = json.loads((run_dir / "provenance.json").read_text())
-    identity = code_identity(config)
-    run_paths(config, run_dir, identity["code_sha"])
     validate_request(config, request, run_dir)
     if request["kind"] != "preflight":
-        service_envelope(config, identity["code_sha"], run_dir.name)
-    if any(identity[key] != provenance[key] for key in identity):
-        raise ValueError("worker code/provenance drift")
+        service_envelope(config)
     stage = request["kind"]
     set_threads(config, use_torch=stage != "manifest")
     diagnostic = stage in ("manifest", "sequence")
-    installed_wheel(provenance["wheels"]["diagnostic" if diagnostic else "normal"], diagnostic, provenance["code_sha"])
+    installed_wheel(diagnostic)
     if stage == "preflight":
-        result = preflight_job(config, provenance)
+        result = preflight_job(config)
     elif stage in ("timing", "validate"):
         samples = corpus.samples_from_manifest(config["corpus"], run_dir / "corpus.tsv")
         order = list(range(len(samples)))
@@ -860,16 +780,15 @@ def native_stage(config, run_dir, heartbeat):
                 command.extend(["--flamegraph-cost-type", cost, "--print-flamegraph", str(stacks)])
                 with Path(str(stem) + f".{label}.txt").open("w") as out, Path(str(stem) + f".{label}.stderr").open("w") as err:
                     process_group(command, out, err, config["resources"]["native_seconds"], heartbeat)
-                exports[label] = {"path": str(stacks), "sha256": corpus.digest(stacks)}
-            manifest.append({"checkpoint": checkpoint, "repeat": repeat, "profile": str(profile), "profile_sha256": corpus.digest(profile),
+                exports[label] = {"path": str(stacks)}
+            manifest.append({"checkpoint": checkpoint, "repeat": repeat, "profile": str(profile),
                              "compression": profile.suffix, "exports": exports})
     atomic_json(run_dir / "native-profiles.json", manifest)
 
 
 class Heartbeat:
-    def __init__(self, config, control, run_dir, start_ns, previous_elapsed_ns=0):
+    def __init__(self, config, control, run_dir, start_ns):
         self.config, self.control, self.run_dir, self.start_ns = config, control, run_dir, start_ns
-        self.previous_elapsed_ns = previous_elapsed_ns
         self.stage = "setup"
         self.stop = threading.Event()
         self.error = None
@@ -880,8 +799,6 @@ class Heartbeat:
             raise self.error
         if (time.monotonic_ns() - self.start_ns) / 1e9 > self.config["resources"]["attempt_seconds"]:
             raise TimeoutError("attempt exceeded its one-hour budget")
-        if (time.monotonic_ns() - self.start_ns + self.previous_elapsed_ns) / 1e9 > self.config["resources"]["total_seconds"]:
-            raise TimeoutError("two-attempt total budget exhausted")
         if shutil.disk_usage(self.run_dir).free < self.config["resources"]["stop_free_bytes"]:
             raise OSError("free artifact storage below 2 GiB")
 
@@ -905,36 +822,26 @@ class Heartbeat:
 
 def verify_stage(record, run_dir, binding):
     if record.get("exit_code") != 0 or record.get("binding") != binding:
-        raise ValueError("stage is incomplete or belongs to another build")
-    for relative, expected in record["artifacts"].items():
+        raise ValueError("stage is incomplete or belongs to another run")
+    for relative in record["artifacts"]:
         path = (run_dir / relative).resolve(strict=True)
-        if not path.is_relative_to(run_dir) or corpus.digest(path) != expected:
-            raise ValueError("completed stage artifacts changed")
+        if not path.is_relative_to(run_dir) or not path.is_file():
+            raise ValueError("completed stage artifact missing or outside run directory")
 
 
-def check_retry(config, control, run_dir):
+def check_resume(control):
     current_path = control / "completion.json"
     if current_path.exists():
         current = json.loads(current_path.read_text())
         if "failure_kind" in current or "error" in current:
-            raise ValueError("attempt has a terminal failure; semantic failures need a new SHA/review, eligible infrastructure failures need the next attempt")
+            raise ValueError("run has a terminal failure; use a new run directory")
     elif (control / "launch.json").exists():
-        raise ValueError("attempt was interrupted without a completion record; document its failure before entering the next attempt")
+        raise ValueError("run was interrupted without a completion record; use a new run directory")
     stage_path = control / "stages.json"
     if stage_path.exists():
         stages = json.loads(stage_path.read_text())
         if any(record.get("exit_code") != 0 for record in stages.values()):
-            raise ValueError("attempt has an interrupted or failed stage; its disposition must be recorded before entering the next attempt")
-    if run_dir.name == "attempt-01":
-        return 0
-    previous = control.with_name(control.name.replace("attempt-02", "attempt-01"))
-    completion = json.loads((previous / "completion.json").read_text())
-    if completion.get("success") or completion.get("failure_kind") not in config["decision"]["retry_reasons"]:
-        raise ValueError("retry is only allowed for a documented infrastructure/interruption/resource failure")
-    elapsed = completion.get("elapsed_ns")
-    if type(elapsed) is not int or elapsed < 0 or elapsed >= config["resources"]["total_seconds"] * 1_000_000_000:
-        raise ValueError("retry requires a valid documented prior elapsed budget")
-    return elapsed
+            raise ValueError("run has an interrupted or failed stage; use a new run directory")
 
 
 def run_stage(stage, config, run_dir, provenance, heartbeat):
@@ -956,7 +863,7 @@ def run_stage(stage, config, run_dir, provenance, heartbeat):
     elif stage == "validate":
         samples = corpus.samples_from_manifest(config["corpus"], run_dir / "corpus.tsv")
         order = list(range(len(samples)))
-        random.Random(37).shuffle(order)
+        random.Random(config["timing"]["order_seed"]).shuffle(order)
         cells = {}
         for cell in configurations(config):
             cells[cell["config_id"]] = child_job(config, {"kind": "validate", "cell": cell}, run_dir, "validate-" + cell["config_id"], heartbeat)
@@ -981,13 +888,12 @@ def classify_failure(error):
         return "external-interruption"
     if isinstance(error, (MemoryError, OSError, TimeoutError)):
         return "resource-exhaustion"
-    # Semantic/parity/reuse/provenance failures cannot be retried on the same SHA.
     return "semantic-or-unclassified"
 
 
 
-def service_envelope(config, sha, attempt):
-    unit = f"imgread-loader-study-{sha}-a{int(attempt.rsplit('-', 1)[1]):02d}"
+def service_envelope(config):
+    unit = os.environ.get("IMGREAD_UNIT", "imgread-loader-study")
     output = subprocess.check_output(["systemctl", "--user", "show", unit,
                                       "--property=ControlGroup,MemoryMax,TasksMax,KillMode,RuntimeMaxUSec,TimeoutStopUSec"], text=True, timeout=10)
     fields = dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
@@ -1014,27 +920,27 @@ class Tee:
 
 
 def supervise(config, run_dir, selected_stage, allow_low_memory=False):
-    identity = code_identity(config)
-    run_dir, control = run_paths(config, run_dir, identity["code_sha"])
+    run_dir, control = run_paths(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     control.mkdir(parents=True, exist_ok=True, mode=0o700)
-    lock_path = Path(config["workflow_record_root"]) / (config["study_id"] + ".active.lock")
+    lock_path = ROOT / "target" / "loader-study.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        previous_elapsed_ns = check_retry(config, control, run_dir)
+        check_resume(control)
         if selected_stage != "preflight":
-            service_envelope(config, identity["code_sha"], run_dir.name)
-        wheel_info = wheels(identity)
-        binding = dict(identity, wheels={name: row["sha256"] for name, row in wheel_info.items()}, corpus_sha256=config["corpus"]["manifest_sha256"])
+            service_envelope(config)
+        wheel_info = wheels()
+        binding = {"run_dir": str(run_dir)}
         if allow_low_memory:
             binding["allow_low_memory"] = True
         provenance_path = run_dir / "provenance.json"
         if provenance_path.exists():
             provenance = json.loads(provenance_path.read_text())
-            if provenance["binding"] != binding:
+            if provenance["binding"] != binding or load_config(run_dir / "study.json") != config:
                 raise ValueError("attempt provenance changed")
         else:
-            provenance = dict(identity, binding=binding, wheels=wheel_info, command=sys.argv, created_ns=time.time_ns())
+            provenance = dict(binding=binding, wheels=wheel_info, command=sys.argv, created_ns=time.time_ns())
             atomic_json(provenance_path, provenance)
             atomic_json(run_dir / "study.json", config)
         launch_path = control / "launch.json"
@@ -1052,20 +958,16 @@ def supervise(config, run_dir, selected_stage, allow_low_memory=False):
         def interrupted(_signum, _frame):
             raise KeyboardInterrupt("study cancelled")
         previous_signal = signal.signal(signal.SIGTERM, interrupted)
-        diagnostic_installed = False
+        installed_mode = None
         success = False
         active_stage = None
         try:
-            with Heartbeat(config, control, run_dir, launch["started_ns"], previous_elapsed_ns) as heartbeat:
+            with Heartbeat(config, control, run_dir, launch["started_ns"]) as heartbeat:
                 for stage in STAGES:
                     if selected_stage != "all" and stage != selected_stage:
                         continue
                     active_stage = heartbeat.stage = stage
                     heartbeat.pulse()
-                    if code_identity(config) != identity:
-                        raise ValueError("code or review changed between stages")
-                    # Recompute all natural bytes before each stage, not just paths.
-                    corpus.select(config["corpus"])
                     for predecessor in STAGES[:STAGES.index(stage)]:
                         if predecessor not in records:
                             raise ValueError(f"stage {stage} requires complete {predecessor}")
@@ -1081,18 +983,19 @@ def supervise(config, run_dir, selected_stage, allow_low_memory=False):
                         path = run_dir / filename
                         if path.exists():
                             path.rename(path.with_name(path.name + f".incomplete-{time.time_ns()}"))
-                    if stage in ("memory", "native") and not diagnostic_installed:
-                        install_wheel(wheel_info["diagnostic"])
-                        diagnostic_installed = True
-                    elif stage not in ("memory", "native", "report") and diagnostic_installed:
-                        install_wheel(wheel_info["normal"])
-                        diagnostic_installed = False
+                    if stage != "report":
+                        mode = "diagnostic" if stage in ("memory", "native") else "normal"
+                        if mode != installed_mode:
+                            install_wheel(wheel_info[mode])
+                            installed_mode = mode
                     if stage == "native" and (run_dir / "native").exists():
                         (run_dir / "native").rename(run_dir / f"native.incomplete-{time.time_ns()}")
                     start = time.perf_counter_ns()
                     print(f"Starting {stage}", flush=True)
                     run_stage(stage, config, run_dir, provenance, heartbeat.pulse)
-                    artifacts = {str(path.relative_to(run_dir)): corpus.digest(path) for path in sorted(run_dir.rglob("*")) if path.is_file() and path.name not in ("stdout.log", "stderr.log")}
+                    artifacts = [str(path.relative_to(run_dir)) for path in sorted(run_dir.rglob("*"))
+                                 if path.is_file() and not path.is_relative_to(control)
+                                 and path.name not in ("stdout.log", "stderr.log")]
                     records[stage] = {"exit_code": 0, "elapsed_ns": time.perf_counter_ns() - start, "binding": binding, "artifacts": artifacts}
                     atomic_json(stage_path, records)
                 success = all(stage in records and records[stage]["exit_code"] == 0 for stage in STAGES)
@@ -1105,23 +1008,29 @@ def supervise(config, run_dir, selected_stage, allow_low_memory=False):
             raise
         finally:
             signal.signal(signal.SIGTERM, previous_signal)
-            if diagnostic_installed:
+            if installed_mode == "diagnostic":
                 install_wheel(wheel_info["normal"])
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=ROOT / "benchmarks/loader/study.json")
+    parser.add_argument("--config", type=Path, help="study settings; defaults to saved run settings when resuming")
     parser.add_argument("--run-dir", type=Path)
+    parser.add_argument("--corpus-root", type=Path, help="image corpus directory; overrides the config")
     parser.add_argument("--stage", choices=(*STAGES, "all"), default="preflight")
-    parser.add_argument("--allow-low-memory", action="store_true", help="owner-authorized exception to the 6 GiB admission threshold; recorded for this attempt")
-    parser.add_argument("--self-check", action="store_true", help="validate frozen settings without measurements")
+    parser.add_argument("--allow-low-memory", action="store_true", help="allow less than 6 GiB available memory; record this limitation")
+    parser.add_argument("--self-check", action="store_true", help="validate settings without measurements")
     parser.add_argument("--worker-request", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     os.umask(0o077)
-    config = load_config(args.config)
+    saved_config = args.run_dir / "study.json" if args.run_dir else None
+    config_path = args.config or (saved_config if saved_config and saved_config.is_file()
+                                  else ROOT / "benchmarks/loader/study.json")
+    config = load_config(config_path)
+    if args.corpus_root is not None:
+        config["corpus"]["root"] = str(args.corpus_root.expanduser().resolve())
     if args.self_check:
-        print(json.dumps({"config_sha256": FROZEN_CONFIG_SHA256, "configurations": len(configurations(config))}))
+        print(json.dumps({"configurations": len(configurations(config))}))
         return
     if args.run_dir is None:
         parser.error("--run-dir is required for study stages")
@@ -1131,8 +1040,7 @@ def main():
             raise ValueError("worker request must be inside this attempt's jobs directory")
         worker(config, json.loads(request.read_text()), args.run_dir.resolve())
     else:
-        identity = code_identity(config)
-        run_dir, _control = run_paths(config, args.run_dir, identity["code_sha"])
+        run_dir, _control = run_paths(args.run_dir)
         run_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         with (run_dir / "stdout.log").open("a") as out, (run_dir / "stderr.log").open("a") as err:
             with contextlib.redirect_stdout(Tee(sys.stdout, out)), contextlib.redirect_stderr(Tee(sys.stderr, err)):

@@ -54,7 +54,7 @@ def check(path, allow_local=False):
         require("docs" not in parts, f"internal document: {name}")
         if not allow_local:
             # Assemble markers so this source file can pass its own sdist check.
-            markers = [b"/" + part for part in (b"home/aya/", b"Users/", b"github/workspace/", b"home/runner/work/")]
+            markers = [b"/" + part for part in (b"home/", b"Users/", b"github/workspace/")]
             require(not any(marker in content for marker in markers), f"absolute build path in {name}")
     if wheel:
         require("imgread/__init__.pyi" in files and "imgread/py.typed" in files, "missing typing files")

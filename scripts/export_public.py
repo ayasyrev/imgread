@@ -1,6 +1,5 @@
 """Export a reviewable source snapshot for a new public repository, without Git history."""
 import argparse
-import hashlib
 from pathlib import Path
 import shutil
 import tempfile
@@ -42,9 +41,6 @@ def export(source, destination, repository=None):
             shutil.copyfile(source / relative, target)
         if repository:
             configure(stage, repository)
-        # Hashes cover every exported file; this manifest is for reviewing the transfer.
-        manifest = "".join(f"{hashlib.sha256((stage / path).read_bytes()).hexdigest()}  {path.as_posix()}\n" for path in sorted(paths))
-        (stage / "PUBLIC_SOURCE_SHA256SUMS").write_text(manifest)
         stage.rename(destination)
     return len(paths)
 
@@ -55,7 +51,7 @@ def main():
     parser.add_argument("--repository", help="optional GitHub OWNER/REPOSITORY; sets URLs only in the exported copy")
     args = parser.parse_args()
     count = export(ROOT, args.destination, args.repository)
-    print(f"Exported {count} files to {args.destination}; review PUBLIC_SOURCE_SHA256SUMS before importing")
+    print(f"Exported {count} files to {args.destination}")
     if not args.repository:
         print("Repository URLs copied from source; use --repository to override them")
 

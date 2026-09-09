@@ -193,17 +193,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
         .replace("-dev.", ".dev");
     m.add("__version__", version)?;
     m.add_class::<loader::Loader>()?;
-    // Private wheel provenance, not per-call diagnostics or a public API.
-    m.add(
-        "_build_info",
-        (
-            env!("IMGREAD_BUILD_SHA"),
-            env!("IMGREAD_BUILD_DIRTY"),
-            env!("IMGREAD_BUILD_PROFILE"),
-            env!("IMGREAD_BUILD_RUST_DEBUG"),
-            env!("IMGREAD_BUILD_NATIVE_DEBUG"),
-        ),
-    )?;
+    // Benchmarks reject builds with debug assertions enabled.
+    m.add("_debug_build", cfg!(debug_assertions))?;
     m.add_function(wrap_pyfunction!(load_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(load_numpy_from_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(load_numpy_simple, m)?)?;

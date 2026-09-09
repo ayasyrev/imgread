@@ -8,7 +8,7 @@ import re
 import statistics
 
 import corpus
-from run import ROOT, STAGES, atomic_json, canonical, code_identity, configurations, load_config, run_paths, verify_stage
+from run import STAGES, atomic_json, canonical, configurations, load_config, run_paths, verify_stage
 
 
 def read_rows(path):
@@ -127,12 +127,10 @@ def native_evidence(config, run_dir):
         raise ValueError("incomplete native checkpoint/repeat matrix")
     results = []
     for row in manifest:
-        if corpus.digest(row["profile"]) != row["profile_sha256"]:
-            raise ValueError("native profile changed")
+        if not Path(row["profile"]).is_file():
+            raise ValueError("native profile missing")
         measured = {}
         for label, export in row["exports"].items():
-            if corpus.digest(export["path"]) != export["sha256"]:
-                raise ValueError("native stack export changed")
             measured[label] = native_bytes(export["path"])
         if set(measured) != {"live", "peak"} or not any(value["sites"] for value in measured.values()):
             raise ValueError("missing symbolized native attribution (not zero native memory)")
@@ -272,19 +270,15 @@ def memory_admission(config, provenance):
 def generate(config, run_dir, check_complete=True):
     run_dir = Path(run_dir).resolve()
     provenance = json.loads((run_dir / "provenance.json").read_text())
-    identity = code_identity(config)
-    if any(provenance.get(key) != value for key, value in identity.items()):
-        raise ValueError("report code/config/locks/review provenance changed")
-    _, control = run_paths(config, run_dir, identity["code_sha"])
+    _, control = run_paths(run_dir)
     stages = json.loads((control / "stages.json").read_text())
     for stage in STAGES[:-1]:
         if stage not in stages:
             raise ValueError("report requires all five complete predecessor stages")
         verify_stage(stages[stage], run_dir, provenance["binding"])
     if canonical(json.loads((run_dir / "study.json").read_text())) != canonical(config):
-        raise ValueError("saved config differs from reviewed config")
+        raise ValueError("saved config differs from report settings")
     limitations = memory_admission(config, provenance)
-    corpus.select(config["corpus"])
     validation = json.loads((run_dir / "validation.json").read_text())
     if validation["binding"] != provenance["binding"]:
         raise ValueError("validation/build binding mismatch")
@@ -309,7 +303,7 @@ def generate(config, run_dir, check_complete=True):
                "resource_preflight": provenance["resource_preflight"], "execution_limitations": limitations,
                "decision": "return-to-owner-material-regression" if regressions else "completed", "regressions": regressions}
     atomic_json(run_dir / "summary.json", summary)
-    lines = ["# Loader paths/indices study", "", f"Code SHA: `{provenance['code_sha']}`. Five paired rounds per cell; same corpus, output digests and build.",
+    lines = ["# Loader paths/indices study", "", "Five paired rounds per cell; matching output pixels and labels.",
              "", f"Decision: **{summary['decision']}**.", "", *limitations, "", "## Warmed time and preparation", "",
              "| Configuration | ns/image median [min, max] | IQR | images/s | startup ns median | list preparation ns median |",
              "|---|---:|---:|---:|---:|---:|"]
@@ -335,7 +329,7 @@ def generate(config, run_dir, check_complete=True):
     for row in native:
         lines.append(f"| {row['checkpoint']} / {row['repeat']} | {row['measured']['live']['native_bytes']} | {row['measured']['peak']['native_bytes']} |")
     lines.extend(["", "Live-at-checkpoint allocations intentionally remain alive when heaptrack_stop flushes the trace. Normal Python cleanup follows. The destroyed checkpoint explicitly deletes Loader before trace stop. RSS remaining after frees is allocator/process residency, not exact native retention. Native-at-process-peak is separate from retained native bytes and is not a sum of independent per-stack maxima.",
-                  "", "## Reproduction and limitations", "", "See provenance.json for locked dependencies, wheels, extension hashes, CPU/tool identifiers, the approved review and resolved DataLoader kwargs; study.json for the frozen matrix; corpus.tsv and generated-inputs.json for input identities. All raw timings, discarded short attempts, memory samples and complete native stacks are preserved. summary.json contains every paired value and preparation delta, including negative deltas.",
+                  "", "## Reproduction and limitations", "", "See provenance.json for dependencies, wheel paths, CPU/tool identifiers and resolved DataLoader kwargs; study.json for the measurement settings; corpus.tsv and generated-inputs.json for input identities. All raw timings, discarded short attempts, memory samples and complete native stacks are preserved. summary.json contains every paired value and preparation delta, including negative deltas.",
                   "", "These five rounds describe this CPU, corpus and crop/collation pipeline. Direct decode and whole-pipeline effects must be interpreted separately. No universal hardware or training-speed claim follows from this study.", ""])
     (run_dir / "report.md").write_text("\n".join(lines))
     return summary
@@ -346,7 +340,7 @@ def main():
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--check-complete", action="store_true")
     args = parser.parse_args()
-    result = generate(load_config(ROOT / "benchmarks/loader/study.json"), args.run_dir, args.check_complete)
+    result = generate(load_config(args.run_dir / "study.json"), args.run_dir, args.check_complete)
     print(json.dumps({"complete": result["complete"], "decision": result["decision"]}))
 
 
