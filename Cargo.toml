@@ -1,12 +1,12 @@
 [package]
 name = "imgread"
-version = "0.2.1-dev.0"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.88"
 publish = false
 include = [
     "/src/**", "/Cargo.toml", "/Cargo.lock", "/pyproject.toml", "/uv.lock", "/python/**",
-    "/README.md", "/LICENSE", "/THIRD_PARTY_NOTICES.md", "/licenses/**",
+    "/README.md", "/CHANGELOG.md", "/LICENSE", "/THIRD_PARTY_NOTICES.md", "/licenses/**",
     "/tests/**", "/python_tests/**", "/about.toml", "/about.hbs", "/deny.toml",
 ]
 license = "MIT"

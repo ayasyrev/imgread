@@ -53,6 +53,8 @@ retains its default features in this beta.
 
 ## Persistent Loader
 
+Requires imgread 0.2.1 or newer. See the [changelog](CHANGELOG.md) for release details.
+
 ```python
 loader = imgread.Loader(color="rgb", backend="auto")
 rgb = loader("photo.jpg")
