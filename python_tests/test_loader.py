@@ -1,3 +1,4 @@
+import errno
 import inspect
 import os
 import warnings
@@ -136,7 +137,7 @@ def test_index_protocol_once(paths):
     assert index.calls == 1
 
 
-def test_lazy_files_cwd_unicode_and_surrogates(tmp_path, monkeypatch):
+def test_lazy_files_and_cwd(tmp_path, monkeypatch):
     loader = imgread.Loader(["relative.png"])
     for directory, color in ((tmp_path / "a", 1), (tmp_path / "b", 2)):
         directory.mkdir()
@@ -148,10 +149,18 @@ def test_lazy_files_cwd_unicode_and_surrogates(tmp_path, monkeypatch):
         Path("relative.png").unlink()
         with pytest.raises(FileNotFoundError):
             loader[0]
-    for name in ("картинка.png", os.fsdecode(b"image-\xff.png")):
-        path = tmp_path / name
+
+
+@pytest.mark.parametrize("name", ["картинка.png", b"image-\xff.png"], ids=["unicode", "non-utf8"])
+def test_unicode_and_surrogate_paths(tmp_path, name):
+    path = tmp_path / os.fsdecode(name)
+    try:
         path.write_bytes(encode())
-        np.testing.assert_array_equal(imgread.Loader([path])[0], imgread.load_numpy(path))
+    except OSError as error:
+        if isinstance(name, bytes) and error.errno == errno.EILSEQ:
+            pytest.skip("filesystem rejects non-UTF-8 filenames")
+        raise
+    np.testing.assert_array_equal(imgread.Loader([path])[0], imgread.load_numpy(path))
 
 
 CASES = [("RGB", "JPEG", {}), ("RGB", "JPEG", {"progressive": True}),

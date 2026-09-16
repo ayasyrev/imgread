@@ -1,5 +1,6 @@
 """Importable, torch/pytest-free process and lifecycle probes."""
 import argparse
+import errno
 import gc
 import json
 import multiprocessing as mp
@@ -128,14 +129,24 @@ def path_spelling_probe(path, method):
     try:
         paths = [str(path), str(path) + "/", "", "./" + path.name,
                  "././" + path.name, str(path.parent) + "//" + path.name]
+        non_utf8_fixture_created = False
         if os.name == "posix":
             raw_name = b"raw-\xff.jpg"
-            with open(raw_name, "wb") as stream:
-                stream.write(path.read_bytes())
+            try:
+                with open(raw_name, "wb") as stream:
+                    stream.write(path.read_bytes())
+                non_utf8_fixture_created = True
+            except OSError as error:
+                if error.errno != errno.EILSEQ:
+                    raise
+                # Some filesystems reject this name. Still check its spelling
+                # and error parity through pickle and worker processes.
             paths.append(os.fsdecode(raw_name))
         expected = path_outcomes(imgread.Loader(paths))
         assert expected[1]["error"] == "NotADirectoryError"
         assert expected[2]["error"] == "FileNotFoundError"
+        if os.name == "posix" and not non_utf8_fixture_created:
+            assert expected[-1]["errno"] == errno.EILSEQ
         for warm in (False, True):
             loader = imgread.Loader(paths)
             if warm:
@@ -162,7 +173,8 @@ def path_spelling_probe(path, method):
             finally:
                 parent.close()
                 terminate(process)
-        return {"method": method, "paths": paths, "outcomes": expected}
+        return {"method": method, "paths": paths, "outcomes": expected,
+                "non_utf8_fixture_created": non_utf8_fixture_created}
     finally:
         os.chdir(previous)
 
