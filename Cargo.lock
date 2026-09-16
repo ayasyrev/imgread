@@ -398,7 +398,7 @@ dependencies = [
 
 [[package]]
 name = "imgread"
-version = "0.2.1"
+version = "0.3.0-dev.0"
 dependencies = [
  "image",
  "numpy",
