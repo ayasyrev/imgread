@@ -3,7 +3,8 @@
 imgread includes code from the locked Rust dependency graph for Linux x86_64
 and macOS x86_64/arm64. Full texts and per-license crate/version attribution,
 including build dependencies, are in `licenses/rust/THIRD_PARTY_LICENSES.txt`.
-Generate them with `uv run python scripts/update_notices.py` after changing Cargo.lock.
+After changing Cargo.lock, regenerate the Rust notices with
+`cargo about generate --locked --all-features about.hbs > licenses/rust/THIRD_PARTY_LICENSES.txt`.
 
 The `turbojpeg-sys` 1.2.0 crate vendors **libjpeg-turbo 3.1.0**,
 which is statically linked in official wheels. The Rust wrapper's MIT/Unlicense

@@ -9,7 +9,11 @@ use std::path::PathBuf;
 
 pub mod decoder;
 pub mod error;
+mod input_buffer;
+#[cfg(feature = "turbojpeg")]
+mod jpeg_reuse;
 pub mod limits;
+mod loader;
 #[cfg(feature = "turbojpeg")]
 mod turbo_backend;
 
@@ -188,6 +192,9 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
         .replace("-beta.", "b")
         .replace("-dev.", ".dev");
     m.add("__version__", version)?;
+    m.add_class::<loader::Loader>()?;
+    // Benchmarks reject builds with debug assertions enabled.
+    m.add("_debug_build", cfg!(debug_assertions))?;
     m.add_function(wrap_pyfunction!(load_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(load_numpy_from_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(load_numpy_simple, m)?)?;

@@ -7,6 +7,9 @@ __pycache__/
 tmp/
 .uv-cache/
 dist/
+/benchmark/
+/benchmarks/
+/scripts/
 python/imgread/*.so
 python/imgread/*.pyd
 python/imgread/*.dylib

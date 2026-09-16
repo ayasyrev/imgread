@@ -42,12 +42,11 @@ dev = [
 module-name = "imgread._native"
 python-source = "python"
 features = ["extension-module", "turbojpeg"]
-exclude = ["AGENTS.md", "CLAUDE.md", "conductor/**", "docs/**", "tmp/**", "target/**", ".venv/**", ".pytest_cache/**", "**/__pycache__/**", ".uv-cache/**", ".agents/**", ".codex/**"]
+exclude = ["AGENTS.md", "CLAUDE.md", "conductor/**", "docs/**", "tmp/**", "target/**", "benchmark/**", "benchmarks/**", "scripts/**", ".venv/**", ".pytest_cache/**", "**/__pycache__/**", ".uv-cache/**", ".agents/**", ".codex/**"]
 include = [
   { path = "Cargo.lock", format = "sdist" },
   { path = "python_tests/**", format = "sdist" },
   { path = "tests/**", format = "sdist" },
-  { path = "scripts/**", format = "sdist" },
 ]
 
 [project.urls]
