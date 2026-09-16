@@ -28,8 +28,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # An implicit ref makes checkout replace an annotated tag with the
+          # event's commit SHA. Preserve the tag object and bind it below.
+          ref: ${{ github.ref }}
           fetch-depth: 0
-      - run: test "$(git cat-file -t "$GITHUB_REF")" = tag
+      - name: Verify annotated tag and event commit
+        run: |
+          test "$(git cat-file -t "$GITHUB_REF")" = tag
+          test "$(git rev-parse "$GITHUB_REF^{commit}")" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - uses: astral-sh/setup-uv@v6
       - id: version
         run: |
