@@ -146,7 +146,13 @@ def path_spelling_probe(path, method):
         assert expected[1]["error"] == "NotADirectoryError"
         assert expected[2]["error"] == "FileNotFoundError"
         if os.name == "posix" and not non_utf8_fixture_created:
-            assert expected[-1]["errno"] == errno.EILSEQ
+            # A rejected create and a later read may have different errno
+            # values. Compare the same read operation with Python's file API.
+            try:
+                with open(raw_name, "rb"):
+                    raise AssertionError("rejected filename unexpectedly exists")
+            except OSError as error:
+                assert expected[-1] == {"error": type(error).__name__, "errno": error.errno}
         for warm in (False, True):
             loader = imgread.Loader(paths)
             if warm:
