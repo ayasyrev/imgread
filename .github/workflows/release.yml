@@ -1,4 +1,4 @@
-name: Beta release
+name: Publish release
 on:
   push:
     tags: ['v*']
@@ -84,6 +84,7 @@ jobs:
   pypi-smoke:
     needs: [version, pypi]
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-15-intel, macos-15]
         python: ['3.11', '3.12', '3.13', '3.14']
@@ -95,5 +96,49 @@ jobs:
       - env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          uv pip install --python .smoke/bin/python --only-binary=:all: "imgread==$VERSION" pillow pytest
+          uv pip install --python .smoke/bin/python --default-index https://pypi.org/simple --only-binary=:all: "imgread==$VERSION" pillow pytest
       - run: uv run --no-project --python .smoke/bin/python pytest python_tests -q
+
+  github-release:
+    needs: [version, pypi-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: beta-dist
+      - run: sha256sum --check SHA256SUMS
+      - name: Verify PyPI hashes and prepare release notes
+        run: |
+          uv run --no-project python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          from urllib.request import urlopen
+          version = os.environ['VERSION']
+          with urlopen(f'https://pypi.org/pypi/imgread/{version}/json', timeout=30) as response:
+              published = {f['filename']: f['digests']['sha256'] for f in json.load(response)['urls']}
+          expected = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in Path('dist').iterdir()}
+          assert published == expected, 'PyPI files/hashes differ from the tested artifact set'
+          changelog = Path('CHANGELOG.md').read_text()
+          section = changelog.split(f'## {version} — ', 1)[1].split('\n', 1)[1].split('\n## ', 1)[0].strip()
+          run = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          Path('release-notes.md').write_text(section + '\n\nValidation: 12 installed wheels, sdist reconstruction, '
+              'and 12 PyPI installation test environments passed.\n\n'
+              f'Commit: `{os.environ["GITHUB_SHA"]}`. [Workflow]({run}).\n')
+          PY
+      - name: Publish GitHub release with the exact PyPI artifacts
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft > release-draft.txt; then
+            test "$(cat release-draft.txt)" = true
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --draft \
+              --title "imgread $VERSION" --notes-file release-notes.md
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/* SHA256SUMS --clobber
+          gh release edit "$GITHUB_REF_NAME" --draft=false --notes-file release-notes.md

@@ -1,4 +1,4 @@
-name: Beta artifacts
+name: Build distributions
 on:
   workflow_dispatch:
   workflow_call:
@@ -113,6 +113,9 @@ jobs:
     needs: [wheels, sdist]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --no-install-project
       - uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
@@ -122,10 +125,26 @@ jobs:
         with:
           name: sdist
           path: release-artifacts/dist
+      - name: Validate the complete publication set
+        run: |
+          uv run --no-sync python - <<'PY'
+          import tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path('Cargo.toml').read_text())['package']['version'].replace('-beta.', 'b')
+          platforms = (
+              'manylinux_2_17_x86_64.manylinux2014_x86_64',
+              'macosx_10_13_x86_64',
+              'macosx_11_0_arm64',
+          )
+          expected = {f'imgread-{version}-cp{py}-cp{py}-{platform}.whl'
+                      for py in ('311', '312', '313', '314') for platform in platforms}
+          expected.add(f'imgread-{version}.tar.gz')
+          actual = {p.name for p in Path('release-artifacts/dist').iterdir()}
+          assert actual == expected, f'missing={sorted(expected - actual)}; unexpected={sorted(actual - expected)}'
+          PY
+          uv run --no-sync twine check --strict release-artifacts/dist/*
       - name: Freeze the complete artifact set
         run: |
-          test "$(find release-artifacts/dist -name '*.whl' | wc -l)" -eq 12
-          test "$(find release-artifacts/dist -name '*.tar.gz' | wc -l)" -eq 1
           cd release-artifacts
           sha256sum dist/* > SHA256SUMS
       - uses: actions/upload-artifact@v4

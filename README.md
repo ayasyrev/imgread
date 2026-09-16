@@ -174,6 +174,44 @@ uv run twine check target/wheels/*
 Keep maturin's configured features when building; passing
 `--features extension-module` alone overrides them and removes TurboJPEG.
 
+## Publishing
+
+Releases are built and published by [GitHub Actions](https://github.com/ayasyrev/imgread/actions/workflows/release.yml).
+Run **Build distributions** (`beta-build.yml`) on a release branch to validate
+the full package matrix without publishing.
+
+1. Update `Cargo.toml`, its root `Cargo.lock` entry and `CHANGELOG.md`, then merge
+   the reviewed changes into `main`.
+2. Permit the release tag in the GitHub `pypi` environment deployment policy.
+   Currently only `v0.2.1` is allowed. Keep its required reviewer enabled.
+3. Create and push an annotated tag matching the package version, for example
+   `git tag -a v0.2.1 -m 'Release imgread 0.2.1'` followed by
+   `git push origin v0.2.1`. These commands assume that tag does not exist yet.
+4. **Publish release** checks the tag/version and runs CI. It builds and tests
+   12 wheels (CPython 3.11–3.14; Linux x86_64 and macOS x86_64/arm64), rebuilds
+   the sdist, validates package metadata and saves SHA256SUMS.
+5. Review the successful build and approve the `pypi` deployment in Actions.
+   The job publishes the same artifacts using PyPI Trusted Publishing.
+6. The workflow installs the published wheels on all 12 combinations, verifies
+   PyPI file hashes, and publishes GitHub release notes with those artifacts.
+
+Configure the PyPI project's GitHub Trusted Publisher with owner `ayasyrev`,
+repository `imgread`, workflow `release.yml`, and environment `pypi`. GitHub also
+requires the Actions variable `PUBLIC_RELEASE_REPOSITORY=ayasyrev/imgread`.
+See [PyPI's setup guide](https://docs.pypi.org/trusted-publishers/adding-a-publisher/).
+
+`uv build` produces a local verification build. On Linux it may generate a
+`linux_x86_64` wheel, which PyPI rejects. The workflow builds portable
+manylinux2014 wheels in the matching container. Do not rename a local wheel or
+publish the local `dist/` directory as a release.
+
+For interrupted releases, retain the original tag and Actions artifact set.
+Inspect any existing PyPI files before retrying an upload; a rebuild is not a
+replacement for already published files. Rerun only failed jobs when possible.
+If only the GitHub release job failed, rerun that job: it can finish an existing
+draft after verifying its input against PyPI, and refuses to overwrite a public
+GitHub release.
+
 ## License
 
 The project uses the MIT license. Redistributed dependency notices are in
