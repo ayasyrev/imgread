@@ -58,45 +58,8 @@ jobs:
     needs: version
     uses: ./.github/workflows/beta-build.yml
 
-  testpypi:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/p/imgread
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: beta-dist
-      - run: sha256sum --check SHA256SUMS
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-
-  testpypi-smoke:
-    needs: [version, testpypi]
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-15-intel, macos-15]
-        python: ['3.11', '3.12', '3.13', '3.14']
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - run: uv venv --python '${{ matrix.python }}' .smoke
-      - run: |
-          uv pip install --python .smoke/bin/python --only-binary=:all: numpy pillow pytest
-      - name: Install exact TestPyPI wheel without source or dependency fallback
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          uv pip install --python .smoke/bin/python --no-deps --only-binary=:all: --index-url https://test.pypi.org/simple/ "imgread==$VERSION"
-      - run: uv run --no-project --python .smoke/bin/python pytest python_tests -q
-
   pypi:
-    needs: testpypi-smoke
+    needs: build
     runs-on: ubuntu-latest
     # Configure required reviewers on this environment before enabling releases.
     environment:
@@ -116,11 +79,12 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-15-intel, macos-15]
+        python: ['3.11', '3.12', '3.13', '3.14']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uv venv --python 3.13 .smoke
+      - run: uv venv --python '${{ matrix.python }}' .smoke
       - env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
