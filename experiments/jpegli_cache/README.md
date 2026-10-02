@@ -115,6 +115,47 @@ UV_CACHE_DIR=.uv-cache uv run --no-project \
 Use `--smoke-count 8` for the smaller smoke. The repeat above followed a passing
 smoke with the same matrix and environment. Output directories must be new.
 
+Add `--size 512` to prepare the same source paths at 512 x 512. The source files
+are decoded again, converted to RGB, resized with bilinear interpolation to a
+512-pixel short side and center-cropped, using the original preparation policy.
+The 256 x 256 prepared cache is not the resizing input. `sized_jpeg.py` supplies
+size-aware JPEG validation and metrics; at 256 x 256 its preparation, encoder
+bytes and metrics were checked against the original helpers. Preparation and
+encoding remain outside timing. The new `prepared.npy` and source manifest are
+saved alongside the report, including counts of upscaled/downscaled sources.
+
+### Repeat at 512 x 512
+
+The 512 x 512 repeat used the same 128 source paths, all 14 encoder settings,
+the same environment and CPU affinity, and the same five-pass plus five-round
+AB/BA protocol. A passing 8-image smoke preceded the full run. Of the sources,
+125 had a short side below 512 pixels and were upscaled; three were downscaled.
+This is a resized corpus, not a set of native 512-pixel crops.
+
+All 896 `encode_jpeg` byte comparisons passed, and all current/baseline imgread
+outputs matched simplejpeg pixel for pixel. The run completed 98,560 timed
+decodes. Results are in
+`../imgread_benchmark/worktree/ram-image-codecs/results/jpegli-decode-20261002-512-imgread-3c0b569/report.md`
+and the adjacent `report.json`.
+
+| JPEGli Q90 setting | KiB/image | PSNR dB | Previous Loader | New Loader | simplejpeg | ajpegli |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 420, sequential | 50.84 | 37.93 | 1,723.7 | 1,748.7 | 1,772.7 | 1,028.6 |
+| 444, sequential | 58.39 | 39.11 | 1,298.3 | 1,314.8 | 1,323.2 | 748.6 |
+| 420, progressive level 2 | 49.32 | 37.93 | 648.7 | 654.4 | 619.0 | 402.5 |
+
+Rates are five-pass median images/s. On Q90/420 sequential, the paired median
+was +1.47% versus the previous Loader and -1.28% versus simplejpeg, but the
+round-to-round ranges crossed zero for both comparisons. This run does not
+establish those small differences. On Q90/420 progressive, the new Loader led
+simplejpeg by 5.79%, with all paired rounds between +5.37% and +5.93%.
+
+For the cache, sequential Q90/420 decoded 2.67x faster than progressive through
+the new Loader, with 3.09% more bytes and the same aggregate PSNR. Compared with
+Pillow/libjpeg-turbo encoding at numeric Q90/420 sequential, JPEGli produced
+15.92% fewer bytes and decoded 11.66% faster through the new Loader, with PSNR
+37.93 versus 37.65 dB. This compares the stated settings, not matched distortion.
+
 ### Standalone 2,000-image comparison
 
 The benchmark takes a prepared `N,H,W,3` uint8 `.npy` array, so dataset preparation
@@ -152,6 +193,6 @@ A 32-image smoke used the same source, versions and settings before the full run
 The sandbox blocks local sockets required by multiprocessing tests; the passing
 Python run used the normal host environment and imgread's own installed metadata.
 
-These measurements cover single-threaded RAM decoding at 256 x 256. They do not
-measure file/shard I/O, DataLoader throughput or model quality. Bigger images,
-other CPUs and multiple workers need their own workload measurement.
+These measurements cover single-threaded RAM decoding. They do not measure
+file/shard I/O, DataLoader throughput or model quality. Other CPUs and multiple
+workers need their own workload measurement.

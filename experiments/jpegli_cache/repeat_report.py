@@ -1,7 +1,8 @@
 """Repeat an imgread_benchmark JPEG report with current and baseline Loaders.
 
 Put the original benchmark worktree and the selected imgread wheel on PYTHONPATH.
-Reuse its encoders, validation, timing loop and five-pass scheduling unchanged.
+Reuse its encoder settings, timing loop and five-pass scheduling. --size prepares
+the same source files at a new resolution with size-aware JPEG validation.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import random
 import statistics
 import warnings
 from dataclasses import asdict
+from functools import partial
 from pathlib import Path
 
 from experiments.ram_image_codecs.contracts import (
@@ -36,6 +38,7 @@ def main():
     parser.add_argument("--imgread-revision", required=True)
     parser.add_argument("--baseline-revision", required=True)
     parser.add_argument("--smoke-count", type=int)
+    parser.add_argument("--size", type=int, choices=(256, 512))
     args = parser.parse_args()
     old = read_json(args.reference_report)
     if len(old["environment"]["affinity"]) != 1:
@@ -71,12 +74,33 @@ def main():
     assert "turbojpeg" in baseline.supported_backends()
     args.output.mkdir(parents=True, exist_ok=False)
     prepared = Path(old["prepared_run"])
-    pixels = np.load(prepared / "prepared.npy", allow_pickle=False)
-    assert len(pixels) == old["sample_size"]
+    count = old["sample_size"]
     if args.smoke_count is not None:
-        if not 0 < args.smoke_count <= len(pixels):
+        if not 0 < args.smoke_count <= count:
             parser.error("smoke-count must be positive and no larger than the corpus")
-        pixels = pixels[: args.smoke_count]
+        count = args.smoke_count
+    preparation = None
+    if args.size is None:
+        pixels = np.load(prepared / "prepared.npy", allow_pickle=False)
+        assert len(pixels) == old["sample_size"]
+        pixels = pixels[:count]
+    else:
+        import sized_jpeg
+
+        print(
+            f"prepare {count} original sources at {args.size}x{args.size}", flush=True
+        )
+        pixels, preparation = sized_jpeg.prepare_sources(
+            prepared, args.size, args.output, count
+        )
+        prepared = args.output.resolve()
+        encode_one = sized_jpeg.encode_one
+        error_metrics = sized_jpeg.error_metrics
+        rgb_control = partial(sized_jpeg.rgb_control, args.size)
+        check_rgb_control = sized_jpeg.check_rgb_control
+    historical_comparable = (
+        args.smoke_count is None and list(pixels.shape[1:]) == old["shape"]
+    )
     specifications = {row["encoder"]["id"]: row["encoder"] for row in old["rows"]}
     specs = [EncoderSpec(**item) for item in specifications.values()]
     decoders = {
@@ -158,7 +182,7 @@ def main():
                 },
                 "passes": [],
             }
-            if args.smoke_count is None and cid in old_rows:
+            if historical_comparable and cid in old_rows:
                 previous = old_rows[cid]
                 assert row["bytes_per_image"] == previous["bytes_per_image"]
                 assert row["metrics"] == previous["metrics"]
@@ -236,29 +260,41 @@ def main():
         "complete": True,
         "reference_report": str(args.reference_report.resolve()),
         "prepared_run": str(prepared),
+        "preparation": preparation,
         "sample_size": len(pixels),
         "shape": list(pixels.shape[1:]),
         "environment": env,
         "imgread_revision": args.imgread_revision,
         "baseline_revision": args.baseline_revision,
         "historical_quality_and_size_matches": historical_matches,
+        "historical_quality_and_size_comparable": historical_comparable,
         "new_encoder_byte_matches": encoder_matches,
         "orders": orders,
         "rows": list(rows.values()),
         "paired": paired,
         "note": old["note"]
-        + " Original imgread adapter retained, including per-call warning context. Added direct current/baseline Loader.decode and five AB/BA confirmation rounds. JPEG buffers encoded afresh from the original prepared corpus; every reader shares the same byte objects in this run.",
+        + " Original imgread adapter retained, including per-call warning context. Added direct current/baseline Loader.decode and five AB/BA confirmation rounds. JPEG buffers encoded afresh from the prepared pixels; every reader shares the same byte objects in this run.",
     }
     atomic_json(args.output / "report.json", result)
     lines = [
         "# JPEG decoder comparison with updated imgread",
         "",
-        f"N={len(pixels)}, RGB uint8 256x256, CPU affinity={env['affinity']}.",
+        f"N={len(pixels)}, RGB uint8 {pixels.shape[2]}x{pixels.shape[1]}, CPU affinity={env['affinity']}.",
         f"imgread {args.imgread_revision}; baseline Loader {args.baseline_revision}.",
         result["note"],
         "",
-        f"Original size/quality rows reproduced exactly: {historical_matches}. New encode_jpeg byte matches: {encoder_matches}.",
+        f"Original size/quality rows reproduced exactly: {historical_matches}. New encode_jpeg byte matches: {encoder_matches}."
+        if historical_comparable
+        else f"Original size/quality comparison not applicable (different size or smoke subset). New encode_jpeg byte matches: {encoder_matches}.",
         "",
+    ]
+    if preparation is not None:
+        lines += [
+            f"Preparation: {preparation['preparation']}. The source paths and their order match the reference manifest. Prepared pixels and the manifest are saved beside this report.",
+            f"Source resizing: {preparation['upscaled_sources']} upscaled, {preparation['downscaled_sources']} downscaled, {preparation['unchanged_scale_sources']} at unchanged scale. The previous 256x256 cache is not used as the resizing input.",
+            "",
+        ]
+    lines += [
         "## Throughput summary",
         "",
         "Median images/s from the original five-pass protocol. The imgread function retains its original adapter; Loader calls are direct.",
