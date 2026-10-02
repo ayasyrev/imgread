@@ -73,6 +73,50 @@ isolate Loader performance or the marker-search change.
 
 ## Reproduce
 
+### Repeat of the original 128-image JPEG comparison
+
+`repeat_report.py` repeats the encoder matrix and validation/timing helpers from
+`imgread_benchmark/experiments/ram_image_codecs`. It uses the exact prepared run
+and environment recorded in a supplied reference report, retaining the original
+three reader adapters and adding current/baseline `Loader.decode`. Five AB/BA
+rounds confirm the small differences separately from the original five-pass
+table. For jpegli settings, it also checks that `imgread.encode_jpeg` produces
+the exact same bytes as the original encoder call.
+
+The 2026-10-02 repeat used the original **128** images, all **14** JPEG settings,
+imgread `3c0b569`, baseline `2096de5`, and NumPy 2.5.3. All 42 original size/quality
+rows matched exactly, all 896 new-encoder byte comparisons passed, and all
+imgread outputs matched simplejpeg exactly. There were 98,560 timed decodes.
+
+At jpegli Q90/420 sequential, the five-pass medians were 5,919.9 images/s for the
+new Loader versus 6,000.3 for simplejpeg and 3,454.2 for ajpegli. The paired
+comparison found +1.71% versus the previous Loader and -1.36% versus simplejpeg.
+For progressive Q90/420 the new Loader led simplejpeg by 5.35%, but the absolute
+speed was only 2,171.1 images/s. Historical absolute rates are not a measurement
+of the code change; the baseline Loader is compared in the same process.
+
+The complete repeat report is stored alongside the original benchmark report:
+`../imgread_benchmark/worktree/ram-image-codecs/results/jpegli-decode-20261002-imgread-3c0b569/report.md`.
+It includes all readers, per-pass ranges, paired ratios and quality metrics;
+`report.json` contains the raw measurements. Run from this imgread checkout with
+the selected wheel extracted into `tmp/jpegli-cache/repeat-wheel`:
+
+```sh
+PYTHONPATH=tmp/jpegli-cache/repeat-wheel:../imgread_benchmark/worktree/ram-image-codecs \
+UV_CACHE_DIR=.uv-cache uv run --no-project \
+  --python ../imgread_benchmark/worktree/ram-image-codecs/experiments/ram_image_codecs/.venv/bin/python \
+  python experiments/jpegli_cache/repeat_report.py \
+  --reference-report ../imgread_benchmark/worktree/ram-image-codecs/results/jpegli-decode-20261002/report.json \
+  --baseline-native tmp/jpegli-cache/baseline/imgread/_native.cpython-312-x86_64-linux-gnu.so \
+  --imgread-revision 3c0b569 --baseline-revision 2096de5 \
+  --output /path/to/new-repeat-report
+```
+
+Use `--smoke-count 8` for the smaller smoke. The repeat above followed a passing
+smoke with the same matrix and environment. Output directories must be new.
+
+### Standalone 2,000-image comparison
+
 The benchmark takes a prepared `N,H,W,3` uint8 `.npy` array, so dataset preparation
 is separate from this timing. It needs the optional encoder and simplejpeg:
 
