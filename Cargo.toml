@@ -19,7 +19,7 @@ homepage = "https://github.com/ayasyrev/imgread"
 default = []
 loader-diagnostics = []
 extension-module = ["pyo3/extension-module"]
-turbojpeg = ["dep:turbojpeg"]
+turbojpeg = ["dep:turbojpeg", "dep:memchr"]
 
 [lib]
 name = "imgread"
@@ -30,6 +30,7 @@ image = { version = "0.25.10", default-features = true }
 pyo3 = "0.29.2"
 numpy = "0.29.0"
 turbojpeg = { version = "1.5.1", optional = true }
+memchr = { version = "2.8.3", optional = true }
 thiserror = "2.0.20"
 
 [dev-dependencies]

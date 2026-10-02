@@ -401,6 +401,7 @@ name = "imgread"
 version = "0.3.0-dev.0"
 dependencies = [
  "image",
+ "memchr",
  "numpy",
  "pyo3",
  "thiserror 2.0.20",

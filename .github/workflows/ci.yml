@@ -43,6 +43,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: sudo apt-get update && sudo apt-get install -y cmake nasm
       - run: uv sync --locked --no-install-project --python '${{ matrix.python }}'
+      - if: matrix.python == '3.12'
+        run: uv sync --locked --extra jpegli --no-install-project
       - if: matrix.turbojpeg
         run: uv run --no-sync maturin build --release --locked --out dist
       - if: '!matrix.turbojpeg'
