@@ -1,9 +1,9 @@
 //! A small RAII wrapper over the vendored TurboJPEG 3 API. The high-level crate
 //! does not expose MAXMEMORY; using its allocating helper would bypass the budget.
 use crate::{
-    decoder::rgb_image,
     error::ImgReadError,
     limits::{arithmetic_limit, DecodeLimits},
+    output::{RgbBuffer, RgbOutput},
 };
 use std::{ffi::CStr, ptr::NonNull};
 use turbojpeg::raw;
@@ -82,12 +82,22 @@ impl Drop for Decompressor {
 }
 
 impl Decompressor {
+    #[cfg(test)]
     pub(crate) fn decode(
         &mut self,
         bytes: &[u8],
         bgr: bool,
         limits: DecodeLimits,
     ) -> Result<image::DynamicImage, ImgReadError> {
+        self.decode_into(bytes, bgr, limits)
+    }
+
+    fn decode_into<O: RgbOutput>(
+        &mut self,
+        bytes: &[u8],
+        bgr: bool,
+        limits: DecodeLimits,
+    ) -> Result<O, ImgReadError> {
         if let Some(budget) = limits.max_decoder_alloc {
             let megabytes =
                 i32::try_from(budget / (1024 * 1024)).map_err(|_| arithmetic_limit())?;
@@ -115,22 +125,17 @@ impl Decompressor {
         if width == 0 || height == 0 {
             return Err(ImgReadError::Decode("empty JPEG dimensions".into()));
         }
-        let mut pixels = Vec::new();
-        pixels
-            .try_reserve_exact(size)
-            .map_err(|e| ImgReadError::LimitExceeded(format!("allocation failed: {e}")))?;
-        let output = pixels.spare_capacity_mut()[..size]
-            .as_mut_ptr()
-            .cast::<u8>();
+        let mut pixels = O::allocate(width, height, size)?;
+        let output = pixels.data();
         let format = if bgr {
             raw::TJPF_TJPF_BGR
         } else {
             raw::TJPF_TJPF_RGB
         };
         // SAFETY: header and decode use the same immutable input and the same unscaled
-        // handle. `output` points to `size` writable bytes in the spare capacity of
-        // `pixels`; pitch is width * 3, and RGB/BGR write every byte in that region.
-        // No pointers escape. The vector length remains zero unless decoding succeeds.
+        // handle. RgbBuffer guarantees `output` points to at least `size` private
+        // writable bytes. Pitch is width * 3; RGB/BGR write every byte in that
+        // region. Uninitialized output is never exposed, including on errors.
         if unsafe {
             raw::tj3Decompress8(
                 self.0.as_ptr(),
@@ -146,10 +151,7 @@ impl Decompressor {
         }
         // SAFETY: a successful full-image tj3Decompress8 call initialized all `size`
         // bytes described above. The allocation has capacity for at least that region.
-        unsafe {
-            pixels.set_len(size);
-        }
-        rgb_image(width, height, pixels)
+        unsafe { O::finish(width, height, size, pixels) }
     }
 }
 
@@ -161,6 +163,7 @@ pub(crate) struct NativeSlot {
     pub(crate) creations: usize,
 }
 impl NativeSlot {
+    #[cfg(test)]
     pub(crate) fn decode(
         &mut self,
         bytes: &[u8],
@@ -168,6 +171,16 @@ impl NativeSlot {
         limits: DecodeLimits,
         reuse: bool,
     ) -> Result<image::DynamicImage, ImgReadError> {
+        self.decode_into(bytes, bgr, limits, reuse)
+    }
+
+    pub(crate) fn decode_into<O: RgbOutput>(
+        &mut self,
+        bytes: &[u8],
+        bgr: bool,
+        limits: DecodeLimits,
+        reuse: bool,
+    ) -> Result<O, ImgReadError> {
         let certified = reuse && crate::jpeg_reuse::is_self_contained(bytes);
         // Uncertified inputs must never see tables left by an earlier image.
         // Drop retained state first, keeping at most one native allocation alive.
@@ -185,7 +198,7 @@ impl NativeSlot {
             .decoder
             .as_mut()
             .expect("initialized decoder")
-            .decode(bytes, bgr, limits);
+            .decode_into(bytes, bgr, limits);
         if result.is_err() || !certified {
             self.decoder = None;
         }

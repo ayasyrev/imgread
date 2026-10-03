@@ -14,12 +14,14 @@ mod input_buffer;
 mod jpeg_reuse;
 pub mod limits;
 mod loader;
+mod output;
 #[cfg(feature = "turbojpeg")]
 mod turbo_backend;
 
 use decoder::{DecodeBackend, DecodeOutput};
 use error::ImgReadError;
 use limits::{allocate_bytes, arithmetic_limit, DecodeLimits};
+use output::NumpyImage;
 
 fn validate_args(color: &str, dtype: &str) -> Result<bool, ImgReadError> {
     let bgr = if color.eq_ignore_ascii_case("rgb") {
@@ -78,7 +80,10 @@ fn buffer_bytes(
     Ok(bytes)
 }
 
-fn to_numpy(py: Python<'_>, result: Result<DecodeOutput, ImgReadError>) -> PyResult<Py<PyAny>> {
+fn to_numpy(
+    py: Python<'_>,
+    result: Result<DecodeOutput<NumpyImage>, ImgReadError>,
+) -> PyResult<Py<PyAny>> {
     let output = result.map_err(|err| err.to_pyerr())?;
     if let Some(warning) = output.fallback_warning {
         // No Rust warning cache: Python's filters own default/always/ignore/error.
@@ -88,10 +93,16 @@ fn to_numpy(py: Python<'_>, result: Result<DecodeOutput, ImgReadError>) -> PyRes
             (warning.message, py.get_type::<PyRuntimeWarning>(), 1),
         )?;
     }
-    let height =
-        usize::try_from(output.image.height()).map_err(|_| arithmetic_limit().to_pyerr())?;
-    let width = usize::try_from(output.image.width()).map_err(|_| arithmetic_limit().to_pyerr())?;
-    let raw = match output.image {
+    #[cfg(feature = "turbojpeg")]
+    let image = match output.image {
+        NumpyImage::Array(array) => return Ok(array.into_any()),
+        NumpyImage::Image(image) => image,
+    };
+    #[cfg(not(feature = "turbojpeg"))]
+    let NumpyImage::Image(image) = output.image;
+    let height = usize::try_from(image.height()).map_err(|_| arithmetic_limit().to_pyerr())?;
+    let width = usize::try_from(image.width()).map_err(|_| arithmetic_limit().to_pyerr())?;
+    let raw = match image {
         image::DynamicImage::ImageRgb8(image) => image.into_raw(),
         _ => return Err(ImgReadError::Decode("internal non-RGB output".into()).to_pyerr()),
     };
@@ -120,7 +131,7 @@ fn load_numpy(
     let path = python_path(py, path)?;
     to_numpy(
         py,
-        py.detach(|| decoder::decode_path(&path, backend, bgr, false, limits)),
+        py.detach(|| decoder::decode_numpy_path(&path, backend, bgr, false, limits)),
     )
 }
 
@@ -142,7 +153,7 @@ fn load_numpy_from_bytes(
     let bytes = buffer_bytes(py, data, limits)?;
     to_numpy(
         py,
-        py.detach(|| decoder::decode_bytes(&bytes, None, backend, bgr, false, limits)),
+        py.detach(|| decoder::decode_numpy_bytes(&bytes, backend, bgr, false, limits)),
     )
 }
 
@@ -155,7 +166,9 @@ fn load_numpy_simple(py: Python<'_>, path: &Bound<'_, PyAny>, limits: &str) -> P
     let path = python_path(py, path)?;
     to_numpy(
         py,
-        py.detach(|| decoder::decode_path(&path, DecodeBackend::TurboJpeg, false, true, limits)),
+        py.detach(|| {
+            decoder::decode_numpy_path(&path, DecodeBackend::TurboJpeg, false, true, limits)
+        }),
     )
 }
 
@@ -173,7 +186,7 @@ fn load_numpy_simple_from_bytes(
     to_numpy(
         py,
         py.detach(|| {
-            decoder::decode_bytes(&bytes, None, DecodeBackend::TurboJpeg, false, true, limits)
+            decoder::decode_numpy_bytes(&bytes, DecodeBackend::TurboJpeg, false, true, limits)
         }),
     )
 }
