@@ -1,0 +1,925 @@
+{
+  "command": [
+    "experiments/borrowed_bytes/compare.py",
+    "--build",
+    "/tmp/imgread-borrow-common-20261004",
+    "--buffers",
+    "/tmp/imgread-release-followup/buffers",
+    "--simplejpeg-extension",
+    "/tmp/imgread-common-core-20261004/simplejpeg-source/simplejpeg/_jpeg.cpython-312-x86_64-linux-gnu.so",
+    "--native-library",
+    "/tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0",
+    "--alignment-module",
+    "/tmp/imgread-variable-sizes-20261004/alignment-policy/_imgread_alignment_policy.cpython-312-x86_64-linux-gnu.so",
+    "--offset",
+    "16",
+    "--output",
+    "experiments/borrowed_bytes/results/smoke-aligned.json",
+    "--count",
+    "8",
+    "--blocks",
+    "1",
+    "--repeat",
+    "1"
+  ],
+  "python": "3.12.13 (main, Jul 18 2026, 17:02:19) [Clang 22.1.3 ]",
+  "numpy": "2.5.3",
+  "simplejpeg": "1.9.0",
+  "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+  "cpu": 3,
+  "build": {
+    "baseline": "ee98d996d0388bef66f0182c4acfae20a146c81c",
+    "candidate_base": "ee98d996d0388bef66f0182c4acfae20a146c81c",
+    "candidate_patch": "diff --git a/src/lib.rs b/src/lib.rs\nindex 12e9619..dd863a8 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -5,7 +5,7 @@ use pyo3::{\n     prelude::*,\n     types::{PyAny, PyBytes, PyModule, PyString, PyTuple},\n };\n-use std::path::PathBuf;\n+use std::{borrow::Cow, path::PathBuf};\n \n pub mod decoder;\n pub mod error;\n@@ -51,23 +51,19 @@ fn python_path(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<PathBuf> {\n     path.extract()\n }\n \n-fn buffer_bytes(\n+fn buffer_bytes<'a>(\n     py: Python<'_>,\n-    data: &Bound<'_, PyAny>,\n+    data: &'a Bound<'_, PyAny>,\n     limits: DecodeLimits,\n-) -> PyResult<Vec<u8>> {\n-    // Immutable bytes can be copied directly with safe Rust after fallible\n-    // reservation, avoiding a redundant zero-fill of a potentially large input.\n+) -> PyResult<Cow<'a, [u8]>> {\n+    // The live Python argument owns immutable storage throughout detach and\n+    // any NumPy allocator callbacks. Other exporters need a private snapshot:\n+    // even a read-only view can have a mutable backing allocation.\n     if let Ok(bytes) = data.cast::<PyBytes>() {\n         let source = bytes.as_bytes();\n         let length = u64::try_from(source.len()).map_err(|_| arithmetic_limit().to_pyerr())?;\n-        let size = limits.check_input(length).map_err(|err| err.to_pyerr())?;\n-        let mut owned = Vec::new();\n-        owned.try_reserve_exact(size).map_err(|err| {\n-            ImgReadError::LimitExceeded(format!(\"input allocation failed: {err}\")).to_pyerr()\n-        })?;\n-        owned.extend_from_slice(source);\n-        return Ok(owned);\n+        limits.check_input(length).map_err(|err| err.to_pyerr())?;\n+        return Ok(Cow::Borrowed(source));\n     }\n     let buffer = PyBuffer::<u8>::get(data)\n         .map_err(|_| PyTypeError::new_err(\"data must be a uint8-compatible buffer\"))?;\n@@ -77,7 +73,7 @@ fn buffer_bytes(\n     buffer\n         .copy_to_slice(py, &mut bytes)\n         .map_err(|_| PyTypeError::new_err(\"data must be a uint8-compatible buffer\"))?;\n-    Ok(bytes)\n+    Ok(Cow::Owned(bytes))\n }\n \n fn to_numpy(\n@@ -136,7 +132,7 @@ fn load_numpy(\n }\n \n /// Decode a uint8-compatible buffer to a writable C-contiguous H\u00d7W\u00d73 uint8 array.\n-/// Strided buffers are copied in C order before releasing the GIL.\n+/// Immutable bytes are borrowed; other buffers are copied in C order before releasing the GIL.\n /// Options, exceptions and warnings match load_numpy; limits is keyword-only.\n #[pyfunction(signature = (data, color = \"rgb\", dtype = \"uint8\", backend = \"auto\", *, limits = \"safe\"))]\n fn load_numpy_from_bytes(\n@@ -174,7 +170,8 @@ fn load_numpy_simple(py: Python<'_>, path: &Bound<'_, PyAny>, limits: &str) -> P\n \n /// Decode a JPEG uint8-compatible buffer to an H\u00d7W\u00d73 uint8 RGB array.\n /// Uses TurboJPEG with image fallback and RuntimeWarning. Non-JPEG raises ValueError.\n-/// Strided buffers are accepted; limits is safe (default) or trusted-only unlimited.\n+/// Immutable bytes are borrowed; other buffers are copied in C order before releasing the GIL.\n+/// Limits is safe (default) or trusted-only unlimited.\n #[pyfunction(signature = (data, *, limits = \"safe\"))]\n fn load_numpy_simple_from_bytes(\n     py: Python<'_>,\n@@ -215,3 +212,43 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {\n     m.add_function(wrap_pyfunction!(supported_backends, m)?)?;\n     Ok(())\n }\n+\n+#[cfg(test)]\n+mod buffer_tests {\n+    use super::*;\n+    use pyo3::{exceptions::PyValueError, types::PyByteArray};\n+\n+    #[test]\n+    fn immutable_input_uses_the_original_storage() {\n+        Python::attach(|py| {\n+            let source = PyBytes::new(py, b\"jpeg bytes\");\n+            let input = buffer_bytes(py, source.as_any(), DecodeLimits::SAFE).unwrap();\n+            assert_eq!(input.as_ptr(), source.as_bytes().as_ptr());\n+            assert_eq!(&*input, source.as_bytes());\n+        });\n+    }\n+\n+    #[test]\n+    fn mutable_input_is_an_independent_snapshot() {\n+        Python::attach(|py| {\n+            let source = PyByteArray::new(py, b\"jpeg bytes\");\n+            let input = buffer_bytes(py, source.as_any(), DecodeLimits::SAFE).unwrap();\n+            source.call_method1(\"__setitem__\", (0, b'X')).unwrap();\n+            assert_eq!(&*input, b\"jpeg bytes\");\n+        });\n+    }\n+\n+    #[test]\n+    fn borrowed_input_still_obeys_the_input_limit() {\n+        Python::attach(|py| {\n+            let source = PyBytes::new(py, b\"jpeg bytes\");\n+            let limits = DecodeLimits {\n+                max_input_bytes: Some(3),\n+                ..DecodeLimits::SAFE\n+            };\n+            let error = buffer_bytes(py, source.as_any(), limits).unwrap_err();\n+            assert!(error.is_instance_of::<PyValueError>(py));\n+            assert!(error.to_string().contains(\"max_input_bytes\"));\n+        });\n+    }\n+}",
+    "python": "3.12.13 (main, Jul 18 2026, 17:02:19) [Clang 22.1.3 ]",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "compiler": "gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "environment": {
+      "CARGO_TARGET_DIR": "/tmp/imgread-borrow-common-20261004/target",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_BUILD_JOBS": "4",
+      "PYO3_PYTHON": "/home/albu/Prj/AYA/imgread_benchmark/worktree/ram-image-codecs/experiments/ram_image_codecs/.venv/bin/python",
+      "CC": "/usr/bin/gcc",
+      "CFLAGS": "-O3 -fno-lto",
+      "LDFLAGS": "-fno-lto",
+      "TURBOJPEG_SOURCE": "explicit",
+      "TURBOJPEG_DYNAMIC": "1",
+      "TURBOJPEG_STATIC": "0",
+      "TURBOJPEG_LIB_DIR": "/tmp/imgread-common-core-20261004/native/lib",
+      "TURBOJPEG_INCLUDE_DIR": "/tmp/imgread-common-core-20261004/native/include"
+    },
+    "command": [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "--features",
+      "extension-module,turbojpeg"
+    ],
+    "variants": {
+      "baseline": {
+        "source": "/tmp/imgread-borrow-common-20261004/baseline-source",
+        "install": "/tmp/imgread-borrow-common-20261004/baseline",
+        "ldd": "linux-vdso.so.1 (0x00007d09a59f1000)\n\tlibturbojpeg.so.0 => /tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0 (0x00007d09a5669000)\n\tlibgcc_s.so.1 => /usr/lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007d09a5621000)\n\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x00007d09a54fb000)\n\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x00007d09a5200000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007d09a59f3000)"
+      },
+      "candidate": {
+        "source": "/home/albu/Prj/AYA/imgread/worktree/borrowed-bytes-20261004",
+        "install": "/tmp/imgread-borrow-common-20261004/candidate",
+        "ldd": "linux-vdso.so.1 (0x0000779925dee000)\n\tlibturbojpeg.so.0 => /tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0 (0x0000779925a66000)\n\tlibgcc_s.so.1 => /usr/lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000779925a1e000)\n\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x00007799258f8000)\n\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x0000779925600000)\n\t/lib64/ld-linux-x86-64.so.2 (0x0000779925df0000)"
+      }
+    }
+  },
+  "module_paths": {
+    "baseline": "/tmp/imgread-borrow-common-20261004/baseline/imgread/_native.cpython-312-x86_64-linux-gnu.so",
+    "candidate": "/tmp/imgread-borrow-common-20261004/candidate/imgread/_native.cpython-312-x86_64-linux-gnu.so"
+  },
+  "simplejpeg_path": "/tmp/imgread-common-core-20261004/simplejpeg-source/simplejpeg/_jpeg.cpython-312-x86_64-linux-gnu.so",
+  "native_runtime_maps": [
+    "/tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0.4.0"
+  ],
+  "allocation": "private mod64=16",
+  "endpoint": "RAM lookup + public decode + fresh owned RGB output + disposal",
+  "protocol": "paired shuffled forward/reverse blocks; validation returns before timing",
+  "blocks": 1,
+  "passes_per_sample": 1,
+  "rows": [
+    {
+      "case": "jpeg-turbo-q100-b420",
+      "inputs": [
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0000.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0001.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0002.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0003.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0004.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0005.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0006.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0007.jpg"
+      ],
+      "validation": {
+        "images": 8,
+        "shapes": [
+          [
+            256,
+            256,
+            3
+          ]
+        ],
+        "exact_rgb": true,
+        "fresh_owned_writable_output": true
+      },
+      "mean_encoded_bytes": 52860.625,
+      "median_us": {
+        "baseline.function": 382.1783125,
+        "baseline.simple": 379.2891875,
+        "baseline.loader": 379.93225,
+        "candidate.function": 379.3580625,
+        "candidate.simple": 383.59668750000003,
+        "candidate.loader": 379.249125,
+        "simplejpeg": 378.3473125
+      },
+      "pairs": {
+        "candidate.function_over_baseline.function": {
+          "median_percent": -0.737940879363741,
+          "range_percent": [
+            -0.737940879363741,
+            -0.737940879363741
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.function_over_simplejpeg": {
+          "median_percent": 0.26714871933972706,
+          "range_percent": [
+            0.26714871933972706,
+            0.26714871933972706
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_baseline.simple": {
+          "median_percent": 1.1356769826189606,
+          "range_percent": [
+            1.1356769826189606,
+            1.1356769826189606
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_simplejpeg": {
+          "median_percent": 1.3874487346860809,
+          "range_percent": [
+            1.3874487346860809,
+            1.3874487346860809
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_baseline.loader": {
+          "median_percent": -0.17980179360925774,
+          "range_percent": [
+            -0.17980179360925774,
+            -0.17980179360925774
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.loader_over_simplejpeg": {
+          "median_percent": 0.23835573035819735,
+          "range_percent": [
+            0.23835573035819735,
+            0.23835573035819735
+          ],
+          "candidate_slower_blocks": 1
+        }
+      },
+      "blocks": [
+        {
+          "order": [
+            "candidate.simple",
+            "candidate.loader",
+            "baseline.function",
+            "candidate.function",
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.simple",
+            "candidate.function",
+            "baseline.function",
+            "candidate.loader",
+            "candidate.simple"
+          ],
+          "samples": {
+            "candidate.simple": [
+              {
+                "wall_us": 382.20975,
+                "cpu_us": 382.358375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 384.983625,
+                "cpu_us": 384.328375,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 378.316125,
+                "cpu_us": 378.42475,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 380.182125,
+                "cpu_us": 380.283125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 378.027875,
+                "cpu_us": 378.18925,
+                "minor_faults": 1
+              },
+              {
+                "wall_us": 386.32875,
+                "cpu_us": 386.45475,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 377.61225,
+                "cpu_us": 377.727125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 381.103875,
+                "cpu_us": 381.2125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 378.354875,
+                "cpu_us": 378.479875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 380.2235,
+                "cpu_us": 380.349625,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 374.583875,
+                "cpu_us": 374.69025,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 382.11075,
+                "cpu_us": 382.24325,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 379.07375,
+                "cpu_us": 379.184875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 380.79075,
+                "cpu_us": 380.901875,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.simple": 383.59668750000003,
+            "candidate.loader": 379.249125,
+            "baseline.function": 382.1783125,
+            "candidate.function": 379.3580625,
+            "baseline.simple": 379.2891875,
+            "simplejpeg": 378.3473125,
+            "baseline.loader": 379.93225
+          },
+          "cpu_us": {
+            "candidate.simple": 383.34337500000004,
+            "candidate.loader": 379.35393750000003,
+            "baseline.function": 382.322,
+            "candidate.function": 379.4698125,
+            "baseline.simple": 379.41475,
+            "simplejpeg": 378.46675,
+            "baseline.loader": 380.04337499999997
+          }
+        }
+      ]
+    },
+    {
+      "case": "jpeg-turbo-q50-b420",
+      "inputs": [
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0000.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0001.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0002.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0003.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0004.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0005.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0006.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0007.jpg"
+      ],
+      "validation": {
+        "images": 8,
+        "shapes": [
+          [
+            256,
+            256,
+            3
+          ]
+        ],
+        "exact_rgb": true,
+        "fresh_owned_writable_output": true
+      },
+      "mean_encoded_bytes": 8245,
+      "median_us": {
+        "baseline.function": 122.80868749999999,
+        "baseline.simple": 122.77668750000001,
+        "baseline.loader": 125.231375,
+        "candidate.function": 121.74600000000001,
+        "candidate.simple": 123.4205,
+        "candidate.loader": 123.16749999999999,
+        "simplejpeg": 123.2245
+      },
+      "pairs": {
+        "candidate.function_over_baseline.function": {
+          "median_percent": -0.865319483200222,
+          "range_percent": [
+            -0.865319483200222,
+            -0.865319483200222
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.function_over_simplejpeg": {
+          "median_percent": -1.1998425637758658,
+          "range_percent": [
+            -1.1998425637758658,
+            -1.1998425637758658
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.simple_over_baseline.simple": {
+          "median_percent": 0.524376828459383,
+          "range_percent": [
+            0.524376828459383,
+            0.524376828459383
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_simplejpeg": {
+          "median_percent": 0.15905927798449682,
+          "range_percent": [
+            0.15905927798449682,
+            0.15905927798449682
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_baseline.loader": {
+          "median_percent": -1.6480494604487195,
+          "range_percent": [
+            -1.6480494604487195,
+            -1.6480494604487195
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.loader_over_simplejpeg": {
+          "median_percent": -0.04625703492407984,
+          "range_percent": [
+            -0.04625703492407984,
+            -0.04625703492407984
+          ],
+          "candidate_slower_blocks": 0
+        }
+      },
+      "blocks": [
+        {
+          "order": [
+            "candidate.simple",
+            "candidate.loader",
+            "baseline.function",
+            "candidate.function",
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.simple",
+            "candidate.function",
+            "baseline.function",
+            "candidate.loader",
+            "candidate.simple"
+          ],
+          "samples": {
+            "candidate.simple": [
+              {
+                "wall_us": 125.110625,
+                "cpu_us": 125.247375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 121.730375,
+                "cpu_us": 121.83475,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 123.695375,
+                "cpu_us": 123.812125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 122.639625,
+                "cpu_us": 122.74525,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 123.029125,
+                "cpu_us": 123.135875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 122.58825,
+                "cpu_us": 122.692625,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 121.855625,
+                "cpu_us": 121.9625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 121.636375,
+                "cpu_us": 121.74075,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 122.781125,
+                "cpu_us": 122.88925,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 122.77225,
+                "cpu_us": 122.878,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 123.25075,
+                "cpu_us": 123.361375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 123.19825,
+                "cpu_us": 123.305,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 126.773625,
+                "cpu_us": 126.89675,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 123.689125,
+                "cpu_us": 123.797125,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.simple": 123.4205,
+            "candidate.loader": 123.16749999999999,
+            "baseline.function": 122.80868749999999,
+            "candidate.function": 121.74600000000001,
+            "baseline.simple": 122.77668750000001,
+            "simplejpeg": 123.2245,
+            "baseline.loader": 125.231375
+          },
+          "cpu_us": {
+            "candidate.simple": 123.54106250000001,
+            "candidate.loader": 123.27868749999999,
+            "baseline.function": 122.91425000000001,
+            "candidate.function": 121.85162500000001,
+            "baseline.simple": 122.883625,
+            "simplejpeg": 123.33318750000001,
+            "baseline.loader": 125.3469375
+          }
+        }
+      ]
+    },
+    {
+      "case": "jpeg-turbo-q90-b420",
+      "inputs": [
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0000.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0001.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0002.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0003.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0004.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0005.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0006.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0007.jpg"
+      ],
+      "validation": {
+        "images": 8,
+        "shapes": [
+          [
+            256,
+            256,
+            3
+          ]
+        ],
+        "exact_rgb": true,
+        "fresh_owned_writable_output": true
+      },
+      "mean_encoded_bytes": 20254.75,
+      "median_us": {
+        "baseline.function": 188.98025,
+        "baseline.simple": 188.8586875,
+        "baseline.loader": 191.67775,
+        "candidate.function": 190.0359375,
+        "candidate.simple": 190.5926875,
+        "candidate.loader": 192.003375,
+        "simplejpeg": 189.292625
+      },
+      "pairs": {
+        "candidate.function_over_baseline.function": {
+          "median_percent": 0.5586231894602722,
+          "range_percent": [
+            0.5586231894602722,
+            0.5586231894602722
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.function_over_simplejpeg": {
+          "median_percent": 0.39267905973621176,
+          "range_percent": [
+            0.39267905973621176,
+            0.39267905973621176
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_baseline.simple": {
+          "median_percent": 0.918146802222175,
+          "range_percent": [
+            0.918146802222175,
+            0.918146802222175
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_simplejpeg": {
+          "median_percent": 0.6868003970043945,
+          "range_percent": [
+            0.6868003970043945,
+            0.6868003970043945
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_baseline.loader": {
+          "median_percent": 0.16988148076655385,
+          "range_percent": [
+            0.16988148076655385,
+            0.16988148076655385
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_simplejpeg": {
+          "median_percent": 1.4320420565777647,
+          "range_percent": [
+            1.4320420565777647,
+            1.4320420565777647
+          ],
+          "candidate_slower_blocks": 1
+        }
+      },
+      "blocks": [
+        {
+          "order": [
+            "candidate.simple",
+            "candidate.loader",
+            "baseline.function",
+            "candidate.function",
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.simple",
+            "candidate.function",
+            "baseline.function",
+            "candidate.loader",
+            "candidate.simple"
+          ],
+          "samples": {
+            "candidate.simple": [
+              {
+                "wall_us": 192.9585,
+                "cpu_us": 193.340125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 188.226875,
+                "cpu_us": 188.3395,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 191.483,
+                "cpu_us": 191.604375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 192.52375,
+                "cpu_us": 192.63625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 189.381625,
+                "cpu_us": 189.483,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 188.578875,
+                "cpu_us": 188.690125,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 188.347125,
+                "cpu_us": 188.451,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 191.72475,
+                "cpu_us": 191.83725,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 189.429125,
+                "cpu_us": 189.54175,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 188.28825,
+                "cpu_us": 188.402125,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 188.997,
+                "cpu_us": 189.110875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 189.58825,
+                "cpu_us": 189.7045,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 191.421625,
+                "cpu_us": 191.522875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 191.933875,
+                "cpu_us": 192.041375,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.simple": 190.5926875,
+            "candidate.loader": 192.003375,
+            "baseline.function": 188.98025,
+            "candidate.function": 190.0359375,
+            "baseline.simple": 188.8586875,
+            "simplejpeg": 189.292625,
+            "baseline.loader": 191.67775
+          },
+          "cpu_us": {
+            "candidate.simple": 190.8398125,
+            "candidate.loader": 192.1203125,
+            "baseline.function": 189.0865625,
+            "candidate.function": 190.144125,
+            "baseline.simple": 188.97193750000002,
+            "simplejpeg": 189.4076875,
+            "baseline.loader": 191.782125
+          }
+        }
+      ]
+    },
+    {
+      "case": "jpeg-turbo-q90-p420",
+      "inputs": [
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0000.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0001.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0002.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0003.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0004.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0005.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0006.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0007.jpg"
+      ],
+      "validation": {
+        "images": 8,
+        "shapes": [
+          [
+            256,
+            256,
+            3
+          ]
+        ],
+        "exact_rgb": true,
+        "fresh_owned_writable_output": true
+      },
+      "mean_encoded_bytes": 19497.5,
+      "median_us": {
+        "baseline.function": 499.149625,
+        "baseline.simple": 494.5001875,
+        "baseline.loader": 496.7464375,
+        "candidate.function": 495.6155,
+        "candidate.simple": 495.329875,
+        "candidate.loader": 496.8935,
+        "simplejpeg": 497.42575
+      },
+      "pairs": {
+        "candidate.function_over_baseline.function": {
+          "median_percent": -0.7080291806289551,
+          "range_percent": [
+            -0.7080291806289551,
+            -0.7080291806289551
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.function_over_simplejpeg": {
+          "median_percent": -0.3639236609684904,
+          "range_percent": [
+            -0.3639236609684904,
+            -0.3639236609684904
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.simple_over_baseline.simple": {
+          "median_percent": 0.1677830506383815,
+          "range_percent": [
+            0.1677830506383815,
+            0.1677830506383815
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_simplejpeg": {
+          "median_percent": -0.42134429108263705,
+          "range_percent": [
+            -0.42134429108263705,
+            -0.42134429108263705
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.loader_over_baseline.loader": {
+          "median_percent": 0.029605144375088877,
+          "range_percent": [
+            0.029605144375088877,
+            0.029605144375088877
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_simplejpeg": {
+          "median_percent": -0.10700089410328184,
+          "range_percent": [
+            -0.10700089410328184,
+            -0.10700089410328184
+          ],
+          "candidate_slower_blocks": 0
+        }
+      },
+      "blocks": [
+        {
+          "order": [
+            "candidate.simple",
+            "candidate.loader",
+            "baseline.function",
+            "candidate.function",
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.simple",
+            "candidate.function",
+            "baseline.function",
+            "candidate.loader",
+            "candidate.simple"
+          ],
+          "samples": {
+            "candidate.simple": [
+              {
+                "wall_us": 496.33175,
+                "cpu_us": 496.463625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 494.328,
+                "cpu_us": 494.437375,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 494.9955,
+                "cpu_us": 495.106125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 498.7915,
+                "cpu_us": 498.91075,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 503.196125,
+                "cpu_us": 502.78925,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 495.103125,
+                "cpu_us": 495.21,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 495.812125,
+                "cpu_us": 495.931375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 495.418875,
+                "cpu_us": 495.525625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 494.944125,
+                "cpu_us": 495.0535,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 494.05625,
+                "cpu_us": 494.173125,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 496.603625,
+                "cpu_us": 496.714125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 498.247875,
+                "cpu_us": 498.365875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 495.502875,
+                "cpu_us": 495.6145,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 497.99,
+                "cpu_us": 498.1055,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.simple": 495.329875,
+            "candidate.loader": 496.8935,
+            "baseline.function": 499.149625,
+            "candidate.function": 495.6155,
+            "baseline.simple": 494.5001875,
+            "simplejpeg": 497.42575,
+            "baseline.loader": 496.7464375
+          },
+          "cpu_us": {
+            "candidate.simple": 495.4505,
+            "candidate.loader": 497.0084375,
+            "baseline.function": 498.999625,
+            "candidate.function": 495.7285,
+            "baseline.simple": 494.6133125,
+            "simplejpeg": 497.54,
+            "baseline.loader": 496.86
+          }
+        }
+      ]
+    }
+  ],
+  "complete": true
+}

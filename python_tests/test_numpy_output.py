@@ -9,12 +9,10 @@ import sysconfig
 import warnings
 from pathlib import Path
 
+import imgread
 import numpy as np
 import pytest
-
-import imgread
 from test_beta_contract import encode
-
 
 pytestmark = pytest.mark.skipif(
     "turbojpeg" not in imgread.supported_backends(), reason="native JPEG build required"
@@ -164,3 +162,63 @@ def test_allocator_callback_cannot_reenter_loader(memory_policy):
     finally:
         memory_policy.restore(old)
     np.testing.assert_array_equal(result, loader.decode(data))
+
+
+@pytest.mark.parametrize("simple", [False, True])
+@pytest.mark.parametrize("kind", ["bytearray", "readonly", "strided"])
+def test_function_snapshots_other_buffers_before_allocator_callback(
+    memory_policy, simple, kind
+):
+    data = encode(fmt="JPEG")
+    decode = (
+        imgread.load_numpy_simple_from_bytes if simple else imgread.load_numpy_from_bytes
+    )
+    expected = decode(data)
+    if kind == "strided":
+        backing = bytearray(2 * len(data))
+        backing[::2] = data
+        source = memoryview(backing)[::2]
+    else:
+        backing = bytearray(data)
+        source = memoryview(backing).toreadonly() if kind == "readonly" else backing
+
+    def mutate_input():
+        backing[:] = bytes(len(backing))
+
+    old = memory_policy.install(expected.nbytes, mutate_input)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            actual = decode(source)
+        assert memory_policy.stats()[3] == 1
+    finally:
+        memory_policy.restore(old)
+    np.testing.assert_array_equal(actual, expected)
+    assert not any(backing)
+
+
+@pytest.mark.parametrize("simple", [False, True])
+def test_borrowed_temporary_bytes_survive_allocator_callback(memory_policy, simple):
+    data = encode(fmt="JPEG")
+    decode = (
+        imgread.load_numpy_simple_from_bytes if simple else imgread.load_numpy_from_bytes
+    )
+    expected = decode(data)
+    events = []
+
+    class TemporaryBytes(bytes):
+        def __del__(self):
+            events.append("released")
+
+    def observe_input_lifetime():
+        gc.collect()
+        assert events == []
+        events.append("allocation")
+
+    old = memory_policy.install(expected.nbytes, observe_input_lifetime)
+    try:
+        actual = decode(TemporaryBytes(data))
+    finally:
+        memory_policy.restore(old)
+    assert events == ["allocation", "released"]
+    np.testing.assert_array_equal(actual, expected)

@@ -1,0 +1,331 @@
+{
+  "command": [
+    "experiments/borrowed_bytes/compare.py",
+    "--build",
+    "/tmp/imgread-borrow-common-20261004",
+    "--buffers",
+    "/tmp/imgread-variable-sizes-20261004/corpus",
+    "--cases",
+    "native-original",
+    "--simplejpeg-extension",
+    "/tmp/imgread-common-core-20261004/simplejpeg-source/simplejpeg/_jpeg.cpython-312-x86_64-linux-gnu.so",
+    "--native-library",
+    "/tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0",
+    "--output",
+    "experiments/borrowed_bytes/results/smoke-native.json",
+    "--count",
+    "8",
+    "--blocks",
+    "1",
+    "--repeat",
+    "1"
+  ],
+  "python": "3.12.13 (main, Jul 18 2026, 17:02:19) [Clang 22.1.3 ]",
+  "numpy": "2.5.3",
+  "simplejpeg": "1.9.0",
+  "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+  "cpu": 3,
+  "build": {
+    "baseline": "ee98d996d0388bef66f0182c4acfae20a146c81c",
+    "candidate_base": "ee98d996d0388bef66f0182c4acfae20a146c81c",
+    "candidate_patch": "diff --git a/src/lib.rs b/src/lib.rs\nindex 12e9619..dd863a8 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -5,7 +5,7 @@ use pyo3::{\n     prelude::*,\n     types::{PyAny, PyBytes, PyModule, PyString, PyTuple},\n };\n-use std::path::PathBuf;\n+use std::{borrow::Cow, path::PathBuf};\n \n pub mod decoder;\n pub mod error;\n@@ -51,23 +51,19 @@ fn python_path(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<PathBuf> {\n     path.extract()\n }\n \n-fn buffer_bytes(\n+fn buffer_bytes<'a>(\n     py: Python<'_>,\n-    data: &Bound<'_, PyAny>,\n+    data: &'a Bound<'_, PyAny>,\n     limits: DecodeLimits,\n-) -> PyResult<Vec<u8>> {\n-    // Immutable bytes can be copied directly with safe Rust after fallible\n-    // reservation, avoiding a redundant zero-fill of a potentially large input.\n+) -> PyResult<Cow<'a, [u8]>> {\n+    // The live Python argument owns immutable storage throughout detach and\n+    // any NumPy allocator callbacks. Other exporters need a private snapshot:\n+    // even a read-only view can have a mutable backing allocation.\n     if let Ok(bytes) = data.cast::<PyBytes>() {\n         let source = bytes.as_bytes();\n         let length = u64::try_from(source.len()).map_err(|_| arithmetic_limit().to_pyerr())?;\n-        let size = limits.check_input(length).map_err(|err| err.to_pyerr())?;\n-        let mut owned = Vec::new();\n-        owned.try_reserve_exact(size).map_err(|err| {\n-            ImgReadError::LimitExceeded(format!(\"input allocation failed: {err}\")).to_pyerr()\n-        })?;\n-        owned.extend_from_slice(source);\n-        return Ok(owned);\n+        limits.check_input(length).map_err(|err| err.to_pyerr())?;\n+        return Ok(Cow::Borrowed(source));\n     }\n     let buffer = PyBuffer::<u8>::get(data)\n         .map_err(|_| PyTypeError::new_err(\"data must be a uint8-compatible buffer\"))?;\n@@ -77,7 +73,7 @@ fn buffer_bytes(\n     buffer\n         .copy_to_slice(py, &mut bytes)\n         .map_err(|_| PyTypeError::new_err(\"data must be a uint8-compatible buffer\"))?;\n-    Ok(bytes)\n+    Ok(Cow::Owned(bytes))\n }\n \n fn to_numpy(\n@@ -136,7 +132,7 @@ fn load_numpy(\n }\n \n /// Decode a uint8-compatible buffer to a writable C-contiguous H\u00d7W\u00d73 uint8 array.\n-/// Strided buffers are copied in C order before releasing the GIL.\n+/// Immutable bytes are borrowed; other buffers are copied in C order before releasing the GIL.\n /// Options, exceptions and warnings match load_numpy; limits is keyword-only.\n #[pyfunction(signature = (data, color = \"rgb\", dtype = \"uint8\", backend = \"auto\", *, limits = \"safe\"))]\n fn load_numpy_from_bytes(\n@@ -174,7 +170,8 @@ fn load_numpy_simple(py: Python<'_>, path: &Bound<'_, PyAny>, limits: &str) -> P\n \n /// Decode a JPEG uint8-compatible buffer to an H\u00d7W\u00d73 uint8 RGB array.\n /// Uses TurboJPEG with image fallback and RuntimeWarning. Non-JPEG raises ValueError.\n-/// Strided buffers are accepted; limits is safe (default) or trusted-only unlimited.\n+/// Immutable bytes are borrowed; other buffers are copied in C order before releasing the GIL.\n+/// Limits is safe (default) or trusted-only unlimited.\n #[pyfunction(signature = (data, *, limits = \"safe\"))]\n fn load_numpy_simple_from_bytes(\n     py: Python<'_>,\n@@ -215,3 +212,43 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {\n     m.add_function(wrap_pyfunction!(supported_backends, m)?)?;\n     Ok(())\n }\n+\n+#[cfg(test)]\n+mod buffer_tests {\n+    use super::*;\n+    use pyo3::{exceptions::PyValueError, types::PyByteArray};\n+\n+    #[test]\n+    fn immutable_input_uses_the_original_storage() {\n+        Python::attach(|py| {\n+            let source = PyBytes::new(py, b\"jpeg bytes\");\n+            let input = buffer_bytes(py, source.as_any(), DecodeLimits::SAFE).unwrap();\n+            assert_eq!(input.as_ptr(), source.as_bytes().as_ptr());\n+            assert_eq!(&*input, source.as_bytes());\n+        });\n+    }\n+\n+    #[test]\n+    fn mutable_input_is_an_independent_snapshot() {\n+        Python::attach(|py| {\n+            let source = PyByteArray::new(py, b\"jpeg bytes\");\n+            let input = buffer_bytes(py, source.as_any(), DecodeLimits::SAFE).unwrap();\n+            source.call_method1(\"__setitem__\", (0, b'X')).unwrap();\n+            assert_eq!(&*input, b\"jpeg bytes\");\n+        });\n+    }\n+\n+    #[test]\n+    fn borrowed_input_still_obeys_the_input_limit() {\n+        Python::attach(|py| {\n+            let source = PyBytes::new(py, b\"jpeg bytes\");\n+            let limits = DecodeLimits {\n+                max_input_bytes: Some(3),\n+                ..DecodeLimits::SAFE\n+            };\n+            let error = buffer_bytes(py, source.as_any(), limits).unwrap_err();\n+            assert!(error.is_instance_of::<PyValueError>(py));\n+            assert!(error.to_string().contains(\"max_input_bytes\"));\n+        });\n+    }\n+}",
+    "python": "3.12.13 (main, Jul 18 2026, 17:02:19) [Clang 22.1.3 ]",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "compiler": "gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "environment": {
+      "CARGO_TARGET_DIR": "/tmp/imgread-borrow-common-20261004/target",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_BUILD_JOBS": "4",
+      "PYO3_PYTHON": "/home/albu/Prj/AYA/imgread_benchmark/worktree/ram-image-codecs/experiments/ram_image_codecs/.venv/bin/python",
+      "CC": "/usr/bin/gcc",
+      "CFLAGS": "-O3 -fno-lto",
+      "LDFLAGS": "-fno-lto",
+      "TURBOJPEG_SOURCE": "explicit",
+      "TURBOJPEG_DYNAMIC": "1",
+      "TURBOJPEG_STATIC": "0",
+      "TURBOJPEG_LIB_DIR": "/tmp/imgread-common-core-20261004/native/lib",
+      "TURBOJPEG_INCLUDE_DIR": "/tmp/imgread-common-core-20261004/native/include"
+    },
+    "command": [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "--features",
+      "extension-module,turbojpeg"
+    ],
+    "variants": {
+      "baseline": {
+        "source": "/tmp/imgread-borrow-common-20261004/baseline-source",
+        "install": "/tmp/imgread-borrow-common-20261004/baseline",
+        "ldd": "linux-vdso.so.1 (0x00007d09a59f1000)\n\tlibturbojpeg.so.0 => /tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0 (0x00007d09a5669000)\n\tlibgcc_s.so.1 => /usr/lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007d09a5621000)\n\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x00007d09a54fb000)\n\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x00007d09a5200000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007d09a59f3000)"
+      },
+      "candidate": {
+        "source": "/home/albu/Prj/AYA/imgread/worktree/borrowed-bytes-20261004",
+        "install": "/tmp/imgread-borrow-common-20261004/candidate",
+        "ldd": "linux-vdso.so.1 (0x0000779925dee000)\n\tlibturbojpeg.so.0 => /tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0 (0x0000779925a66000)\n\tlibgcc_s.so.1 => /usr/lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000779925a1e000)\n\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x00007799258f8000)\n\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x0000779925600000)\n\t/lib64/ld-linux-x86-64.so.2 (0x0000779925df0000)"
+      }
+    }
+  },
+  "module_paths": {
+    "baseline": "/tmp/imgread-borrow-common-20261004/baseline/imgread/_native.cpython-312-x86_64-linux-gnu.so",
+    "candidate": "/tmp/imgread-borrow-common-20261004/candidate/imgread/_native.cpython-312-x86_64-linux-gnu.so"
+  },
+  "simplejpeg_path": "/tmp/imgread-common-core-20261004/simplejpeg-source/simplejpeg/_jpeg.cpython-312-x86_64-linux-gnu.so",
+  "native_runtime_maps": [
+    "/tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0.4.0"
+  ],
+  "allocation": "default",
+  "endpoint": "RAM lookup + public decode + fresh owned RGB output + disposal",
+  "protocol": "paired shuffled forward/reverse blocks; validation returns before timing",
+  "blocks": 1,
+  "passes_per_sample": 1,
+  "rows": [
+    {
+      "case": "native-original",
+      "inputs": [
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0000.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0001.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0002.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0003.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0004.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0005.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0006.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0007.jpg"
+      ],
+      "validation": {
+        "images": 8,
+        "shapes": [
+          [
+            231,
+            307,
+            3
+          ],
+          [
+            333,
+            500,
+            3
+          ],
+          [
+            334,
+            500,
+            3
+          ],
+          [
+            375,
+            500,
+            3
+          ],
+          [
+            393,
+            500,
+            3
+          ],
+          [
+            480,
+            640,
+            3
+          ],
+          [
+            500,
+            375,
+            3
+          ],
+          [
+            598,
+            400,
+            3
+          ]
+        ],
+        "exact_rgb": true,
+        "fresh_owned_writable_output": true
+      },
+      "mean_encoded_bytes": 128735.125,
+      "median_us": {
+        "baseline.function": 1061.8528125,
+        "baseline.simple": 1046.9469374999999,
+        "baseline.loader": 1050.36975,
+        "candidate.function": 1053.4080625000001,
+        "candidate.simple": 1039.1101250000002,
+        "candidate.loader": 1045.7959375,
+        "simplejpeg": 1046.86425
+      },
+      "pairs": {
+        "candidate.function_over_baseline.function": {
+          "median_percent": -0.7952844217757216,
+          "range_percent": [
+            -0.7952844217757216,
+            -0.7952844217757216
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.function_over_simplejpeg": {
+          "median_percent": 0.6250870158189148,
+          "range_percent": [
+            0.6250870158189148,
+            0.6250870158189148
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_baseline.simple": {
+          "median_percent": -0.7485396078155793,
+          "range_percent": [
+            -0.7485396078155793,
+            -0.7485396078155793
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.simple_over_simplejpeg": {
+          "median_percent": -0.7407001433089255,
+          "range_percent": [
+            -0.7407001433089255,
+            -0.7407001433089255
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.loader_over_baseline.loader": {
+          "median_percent": -0.4354478506259363,
+          "range_percent": [
+            -0.4354478506259363,
+            -0.4354478506259363
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.loader_over_simplejpeg": {
+          "median_percent": -0.10204880909822078,
+          "range_percent": [
+            -0.10204880909822078,
+            -0.10204880909822078
+          ],
+          "candidate_slower_blocks": 0
+        }
+      },
+      "blocks": [
+        {
+          "order": [
+            "candidate.simple",
+            "candidate.loader",
+            "baseline.function",
+            "candidate.function",
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.simple",
+            "candidate.function",
+            "baseline.function",
+            "candidate.loader",
+            "candidate.simple"
+          ],
+          "samples": {
+            "candidate.simple": [
+              {
+                "wall_us": 1044.76775,
+                "cpu_us": 1044.92725,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1033.4525,
+                "cpu_us": 1033.546,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 1047.203625,
+                "cpu_us": 1047.308,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1044.38825,
+                "cpu_us": 1044.49525,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 1052.452375,
+                "cpu_us": 1052.580375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1071.25325,
+                "cpu_us": 1071.368125,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 1061.741375,
+                "cpu_us": 1061.875375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1045.07475,
+                "cpu_us": 1045.1765,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 1044.45975,
+                "cpu_us": 1044.564125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1049.434125,
+                "cpu_us": 1049.554625,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 1044.155375,
+                "cpu_us": 1044.272375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1049.573125,
+                "cpu_us": 1049.698625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 1048.984625,
+                "cpu_us": 1049.100125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1051.754875,
+                "cpu_us": 1051.87775,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.simple": 1039.1101250000002,
+            "candidate.loader": 1045.7959375,
+            "baseline.function": 1061.8528125,
+            "candidate.function": 1053.4080625000001,
+            "baseline.simple": 1046.9469374999999,
+            "simplejpeg": 1046.86425,
+            "baseline.loader": 1050.36975
+          },
+          "cpu_us": {
+            "candidate.simple": 1039.236625,
+            "candidate.loader": 1045.901625,
+            "baseline.function": 1061.97425,
+            "candidate.function": 1053.5259375,
+            "baseline.simple": 1047.059375,
+            "simplejpeg": 1046.9855,
+            "baseline.loader": 1050.4889375
+          }
+        }
+      ]
+    }
+  ],
+  "complete": true
+}

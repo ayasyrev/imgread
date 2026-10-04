@@ -5,7 +5,7 @@ use pyo3::{
     prelude::*,
     types::{PyAny, PyBytes, PyModule, PyString, PyTuple},
 };
-use std::path::PathBuf;
+use std::{borrow::Cow, path::PathBuf};
 
 pub mod decoder;
 pub mod error;
@@ -51,23 +51,19 @@ fn python_path(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<PathBuf> {
     path.extract()
 }
 
-fn buffer_bytes(
+fn buffer_bytes<'a>(
     py: Python<'_>,
-    data: &Bound<'_, PyAny>,
+    data: &'a Bound<'_, PyAny>,
     limits: DecodeLimits,
-) -> PyResult<Vec<u8>> {
-    // Immutable bytes can be copied directly with safe Rust after fallible
-    // reservation, avoiding a redundant zero-fill of a potentially large input.
+) -> PyResult<Cow<'a, [u8]>> {
+    // The live Python argument owns immutable storage throughout detach and
+    // any NumPy allocator callbacks. Other exporters need a private snapshot:
+    // even a read-only view can have a mutable backing allocation.
     if let Ok(bytes) = data.cast::<PyBytes>() {
         let source = bytes.as_bytes();
         let length = u64::try_from(source.len()).map_err(|_| arithmetic_limit().to_pyerr())?;
-        let size = limits.check_input(length).map_err(|err| err.to_pyerr())?;
-        let mut owned = Vec::new();
-        owned.try_reserve_exact(size).map_err(|err| {
-            ImgReadError::LimitExceeded(format!("input allocation failed: {err}")).to_pyerr()
-        })?;
-        owned.extend_from_slice(source);
-        return Ok(owned);
+        limits.check_input(length).map_err(|err| err.to_pyerr())?;
+        return Ok(Cow::Borrowed(source));
     }
     let buffer = PyBuffer::<u8>::get(data)
         .map_err(|_| PyTypeError::new_err("data must be a uint8-compatible buffer"))?;
@@ -77,7 +73,7 @@ fn buffer_bytes(
     buffer
         .copy_to_slice(py, &mut bytes)
         .map_err(|_| PyTypeError::new_err("data must be a uint8-compatible buffer"))?;
-    Ok(bytes)
+    Ok(Cow::Owned(bytes))
 }
 
 fn to_numpy(
@@ -136,7 +132,7 @@ fn load_numpy(
 }
 
 /// Decode a uint8-compatible buffer to a writable C-contiguous H×W×3 uint8 array.
-/// Strided buffers are copied in C order before releasing the GIL.
+/// Immutable bytes are borrowed; other buffers are copied in C order before releasing the GIL.
 /// Options, exceptions and warnings match load_numpy; limits is keyword-only.
 #[pyfunction(signature = (data, color = "rgb", dtype = "uint8", backend = "auto", *, limits = "safe"))]
 fn load_numpy_from_bytes(
@@ -174,7 +170,8 @@ fn load_numpy_simple(py: Python<'_>, path: &Bound<'_, PyAny>, limits: &str) -> P
 
 /// Decode a JPEG uint8-compatible buffer to an H×W×3 uint8 RGB array.
 /// Uses TurboJPEG with image fallback and RuntimeWarning. Non-JPEG raises ValueError.
-/// Strided buffers are accepted; limits is safe (default) or trusted-only unlimited.
+/// Immutable bytes are borrowed; other buffers are copied in C order before releasing the GIL.
+/// Limits is safe (default) or trusted-only unlimited.
 #[pyfunction(signature = (data, *, limits = "safe"))]
 fn load_numpy_simple_from_bytes(
     py: Python<'_>,
@@ -214,4 +211,44 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(load_numpy_simple_from_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(supported_backends, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod buffer_tests {
+    use super::*;
+    use pyo3::{exceptions::PyValueError, types::PyByteArray};
+
+    #[test]
+    fn immutable_input_uses_the_original_storage() {
+        Python::attach(|py| {
+            let source = PyBytes::new(py, b"jpeg bytes");
+            let input = buffer_bytes(py, source.as_any(), DecodeLimits::SAFE).unwrap();
+            assert_eq!(input.as_ptr(), source.as_bytes().as_ptr());
+            assert_eq!(&*input, source.as_bytes());
+        });
+    }
+
+    #[test]
+    fn mutable_input_is_an_independent_snapshot() {
+        Python::attach(|py| {
+            let source = PyByteArray::new(py, b"jpeg bytes");
+            let input = buffer_bytes(py, source.as_any(), DecodeLimits::SAFE).unwrap();
+            source.call_method1("__setitem__", (0, b'X')).unwrap();
+            assert_eq!(&*input, b"jpeg bytes");
+        });
+    }
+
+    #[test]
+    fn borrowed_input_still_obeys_the_input_limit() {
+        Python::attach(|py| {
+            let source = PyBytes::new(py, b"jpeg bytes");
+            let limits = DecodeLimits {
+                max_input_bytes: Some(3),
+                ..DecodeLimits::SAFE
+            };
+            let error = buffer_bytes(py, source.as_any(), limits).unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert!(error.to_string().contains("max_input_bytes"));
+        });
+    }
 }

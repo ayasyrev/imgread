@@ -1,0 +1,1624 @@
+{
+  "command": [
+    "experiments/borrowed_bytes/compare.py",
+    "--build",
+    "/tmp/imgread-borrow-common-20261004",
+    "--buffers",
+    "/tmp/imgread-variable-sizes-20261004/corpus",
+    "--cases",
+    "native-original",
+    "--simplejpeg-extension",
+    "/tmp/imgread-common-core-20261004/simplejpeg-source/simplejpeg/_jpeg.cpython-312-x86_64-linux-gnu.so",
+    "--native-library",
+    "/tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0",
+    "--output",
+    "experiments/borrowed_bytes/results/native-forward.json"
+  ],
+  "python": "3.12.13 (main, Jul 18 2026, 17:02:19) [Clang 22.1.3 ]",
+  "numpy": "2.5.3",
+  "simplejpeg": "1.9.0",
+  "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+  "cpu": 3,
+  "build": {
+    "baseline": "ee98d996d0388bef66f0182c4acfae20a146c81c",
+    "candidate_base": "ee98d996d0388bef66f0182c4acfae20a146c81c",
+    "candidate_patch": "diff --git a/src/lib.rs b/src/lib.rs\nindex 12e9619..dd863a8 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -5,7 +5,7 @@ use pyo3::{\n     prelude::*,\n     types::{PyAny, PyBytes, PyModule, PyString, PyTuple},\n };\n-use std::path::PathBuf;\n+use std::{borrow::Cow, path::PathBuf};\n \n pub mod decoder;\n pub mod error;\n@@ -51,23 +51,19 @@ fn python_path(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<PathBuf> {\n     path.extract()\n }\n \n-fn buffer_bytes(\n+fn buffer_bytes<'a>(\n     py: Python<'_>,\n-    data: &Bound<'_, PyAny>,\n+    data: &'a Bound<'_, PyAny>,\n     limits: DecodeLimits,\n-) -> PyResult<Vec<u8>> {\n-    // Immutable bytes can be copied directly with safe Rust after fallible\n-    // reservation, avoiding a redundant zero-fill of a potentially large input.\n+) -> PyResult<Cow<'a, [u8]>> {\n+    // The live Python argument owns immutable storage throughout detach and\n+    // any NumPy allocator callbacks. Other exporters need a private snapshot:\n+    // even a read-only view can have a mutable backing allocation.\n     if let Ok(bytes) = data.cast::<PyBytes>() {\n         let source = bytes.as_bytes();\n         let length = u64::try_from(source.len()).map_err(|_| arithmetic_limit().to_pyerr())?;\n-        let size = limits.check_input(length).map_err(|err| err.to_pyerr())?;\n-        let mut owned = Vec::new();\n-        owned.try_reserve_exact(size).map_err(|err| {\n-            ImgReadError::LimitExceeded(format!(\"input allocation failed: {err}\")).to_pyerr()\n-        })?;\n-        owned.extend_from_slice(source);\n-        return Ok(owned);\n+        limits.check_input(length).map_err(|err| err.to_pyerr())?;\n+        return Ok(Cow::Borrowed(source));\n     }\n     let buffer = PyBuffer::<u8>::get(data)\n         .map_err(|_| PyTypeError::new_err(\"data must be a uint8-compatible buffer\"))?;\n@@ -77,7 +73,7 @@ fn buffer_bytes(\n     buffer\n         .copy_to_slice(py, &mut bytes)\n         .map_err(|_| PyTypeError::new_err(\"data must be a uint8-compatible buffer\"))?;\n-    Ok(bytes)\n+    Ok(Cow::Owned(bytes))\n }\n \n fn to_numpy(\n@@ -136,7 +132,7 @@ fn load_numpy(\n }\n \n /// Decode a uint8-compatible buffer to a writable C-contiguous H\u00d7W\u00d73 uint8 array.\n-/// Strided buffers are copied in C order before releasing the GIL.\n+/// Immutable bytes are borrowed; other buffers are copied in C order before releasing the GIL.\n /// Options, exceptions and warnings match load_numpy; limits is keyword-only.\n #[pyfunction(signature = (data, color = \"rgb\", dtype = \"uint8\", backend = \"auto\", *, limits = \"safe\"))]\n fn load_numpy_from_bytes(\n@@ -174,7 +170,8 @@ fn load_numpy_simple(py: Python<'_>, path: &Bound<'_, PyAny>, limits: &str) -> P\n \n /// Decode a JPEG uint8-compatible buffer to an H\u00d7W\u00d73 uint8 RGB array.\n /// Uses TurboJPEG with image fallback and RuntimeWarning. Non-JPEG raises ValueError.\n-/// Strided buffers are accepted; limits is safe (default) or trusted-only unlimited.\n+/// Immutable bytes are borrowed; other buffers are copied in C order before releasing the GIL.\n+/// Limits is safe (default) or trusted-only unlimited.\n #[pyfunction(signature = (data, *, limits = \"safe\"))]\n fn load_numpy_simple_from_bytes(\n     py: Python<'_>,\n@@ -215,3 +212,43 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {\n     m.add_function(wrap_pyfunction!(supported_backends, m)?)?;\n     Ok(())\n }\n+\n+#[cfg(test)]\n+mod buffer_tests {\n+    use super::*;\n+    use pyo3::{exceptions::PyValueError, types::PyByteArray};\n+\n+    #[test]\n+    fn immutable_input_uses_the_original_storage() {\n+        Python::attach(|py| {\n+            let source = PyBytes::new(py, b\"jpeg bytes\");\n+            let input = buffer_bytes(py, source.as_any(), DecodeLimits::SAFE).unwrap();\n+            assert_eq!(input.as_ptr(), source.as_bytes().as_ptr());\n+            assert_eq!(&*input, source.as_bytes());\n+        });\n+    }\n+\n+    #[test]\n+    fn mutable_input_is_an_independent_snapshot() {\n+        Python::attach(|py| {\n+            let source = PyByteArray::new(py, b\"jpeg bytes\");\n+            let input = buffer_bytes(py, source.as_any(), DecodeLimits::SAFE).unwrap();\n+            source.call_method1(\"__setitem__\", (0, b'X')).unwrap();\n+            assert_eq!(&*input, b\"jpeg bytes\");\n+        });\n+    }\n+\n+    #[test]\n+    fn borrowed_input_still_obeys_the_input_limit() {\n+        Python::attach(|py| {\n+            let source = PyBytes::new(py, b\"jpeg bytes\");\n+            let limits = DecodeLimits {\n+                max_input_bytes: Some(3),\n+                ..DecodeLimits::SAFE\n+            };\n+            let error = buffer_bytes(py, source.as_any(), limits).unwrap_err();\n+            assert!(error.is_instance_of::<PyValueError>(py));\n+            assert!(error.to_string().contains(\"max_input_bytes\"));\n+        });\n+    }\n+}",
+    "python": "3.12.13 (main, Jul 18 2026, 17:02:19) [Clang 22.1.3 ]",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "compiler": "gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "environment": {
+      "CARGO_TARGET_DIR": "/tmp/imgread-borrow-common-20261004/target",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_BUILD_JOBS": "4",
+      "PYO3_PYTHON": "/home/albu/Prj/AYA/imgread_benchmark/worktree/ram-image-codecs/experiments/ram_image_codecs/.venv/bin/python",
+      "CC": "/usr/bin/gcc",
+      "CFLAGS": "-O3 -fno-lto",
+      "LDFLAGS": "-fno-lto",
+      "TURBOJPEG_SOURCE": "explicit",
+      "TURBOJPEG_DYNAMIC": "1",
+      "TURBOJPEG_STATIC": "0",
+      "TURBOJPEG_LIB_DIR": "/tmp/imgread-common-core-20261004/native/lib",
+      "TURBOJPEG_INCLUDE_DIR": "/tmp/imgread-common-core-20261004/native/include"
+    },
+    "command": [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "--features",
+      "extension-module,turbojpeg"
+    ],
+    "variants": {
+      "baseline": {
+        "source": "/tmp/imgread-borrow-common-20261004/baseline-source",
+        "install": "/tmp/imgread-borrow-common-20261004/baseline",
+        "ldd": "linux-vdso.so.1 (0x00007d09a59f1000)\n\tlibturbojpeg.so.0 => /tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0 (0x00007d09a5669000)\n\tlibgcc_s.so.1 => /usr/lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007d09a5621000)\n\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x00007d09a54fb000)\n\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x00007d09a5200000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007d09a59f3000)"
+      },
+      "candidate": {
+        "source": "/home/albu/Prj/AYA/imgread/worktree/borrowed-bytes-20261004",
+        "install": "/tmp/imgread-borrow-common-20261004/candidate",
+        "ldd": "linux-vdso.so.1 (0x0000779925dee000)\n\tlibturbojpeg.so.0 => /tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0 (0x0000779925a66000)\n\tlibgcc_s.so.1 => /usr/lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000779925a1e000)\n\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x00007799258f8000)\n\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x0000779925600000)\n\t/lib64/ld-linux-x86-64.so.2 (0x0000779925df0000)"
+      }
+    }
+  },
+  "module_paths": {
+    "baseline": "/tmp/imgread-borrow-common-20261004/baseline/imgread/_native.cpython-312-x86_64-linux-gnu.so",
+    "candidate": "/tmp/imgread-borrow-common-20261004/candidate/imgread/_native.cpython-312-x86_64-linux-gnu.so"
+  },
+  "simplejpeg_path": "/tmp/imgread-common-core-20261004/simplejpeg-source/simplejpeg/_jpeg.cpython-312-x86_64-linux-gnu.so",
+  "native_runtime_maps": [
+    "/tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0.4.0"
+  ],
+  "allocation": "default",
+  "endpoint": "RAM lookup + public decode + fresh owned RGB output + disposal",
+  "protocol": "paired shuffled forward/reverse blocks; validation returns before timing",
+  "blocks": 10,
+  "passes_per_sample": 2,
+  "rows": [
+    {
+      "case": "native-original",
+      "inputs": [
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0000.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0001.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0002.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0003.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0004.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0005.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0006.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0007.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0008.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0009.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0010.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0011.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0012.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0013.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0014.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0015.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0016.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0017.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0018.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0019.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0020.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0021.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0022.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0023.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0024.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0025.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0026.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0027.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0028.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0029.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0030.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0031.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0032.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0033.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0034.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0035.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0036.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0037.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0038.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0039.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0040.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0041.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0042.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0043.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0044.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0045.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0046.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0047.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0048.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0049.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0050.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0051.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0052.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0053.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0054.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0055.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0056.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0057.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0058.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0059.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0060.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0061.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0062.jpg",
+        "/tmp/imgread-variable-sizes-20261004/corpus/native-original/0063.jpg"
+      ],
+      "validation": {
+        "images": 64,
+        "shapes": [
+          [
+            125,
+            100,
+            3
+          ],
+          [
+            146,
+            220,
+            3
+          ],
+          [
+            231,
+            307,
+            3
+          ],
+          [
+            250,
+            500,
+            3
+          ],
+          [
+            280,
+            280,
+            3
+          ],
+          [
+            295,
+            480,
+            3
+          ],
+          [
+            300,
+            400,
+            3
+          ],
+          [
+            300,
+            500,
+            3
+          ],
+          [
+            321,
+            480,
+            3
+          ],
+          [
+            333,
+            500,
+            3
+          ],
+          [
+            334,
+            500,
+            3
+          ],
+          [
+            338,
+            506,
+            3
+          ],
+          [
+            361,
+            500,
+            3
+          ],
+          [
+            374,
+            500,
+            3
+          ],
+          [
+            375,
+            500,
+            3
+          ],
+          [
+            385,
+            500,
+            3
+          ],
+          [
+            393,
+            500,
+            3
+          ],
+          [
+            400,
+            300,
+            3
+          ],
+          [
+            415,
+            500,
+            3
+          ],
+          [
+            450,
+            450,
+            3
+          ],
+          [
+            450,
+            600,
+            3
+          ],
+          [
+            480,
+            640,
+            3
+          ],
+          [
+            500,
+            328,
+            3
+          ],
+          [
+            500,
+            333,
+            3
+          ],
+          [
+            500,
+            374,
+            3
+          ],
+          [
+            500,
+            375,
+            3
+          ],
+          [
+            500,
+            384,
+            3
+          ],
+          [
+            500,
+            390,
+            3
+          ],
+          [
+            500,
+            409,
+            3
+          ],
+          [
+            500,
+            429,
+            3
+          ],
+          [
+            500,
+            472,
+            3
+          ],
+          [
+            525,
+            700,
+            3
+          ],
+          [
+            598,
+            400,
+            3
+          ],
+          [
+            600,
+            500,
+            3
+          ],
+          [
+            600,
+            600,
+            3
+          ],
+          [
+            600,
+            800,
+            3
+          ],
+          [
+            681,
+            456,
+            3
+          ]
+        ],
+        "exact_rgb": true,
+        "fresh_owned_writable_output": true
+      },
+      "mean_encoded_bytes": 114387.453125,
+      "median_us": {
+        "baseline.function": 989.3826992187501,
+        "baseline.simple": 985.229056640625,
+        "baseline.loader": 990.2916171875,
+        "candidate.function": 983.6159843749999,
+        "candidate.simple": 978.802861328125,
+        "candidate.loader": 991.1790058593749,
+        "simplejpeg": 984.2655390625
+      },
+      "pairs": {
+        "candidate.function_over_baseline.function": {
+          "median_percent": -0.48382344662631915,
+          "range_percent": [
+            -2.022380740691565,
+            0.7650726135340458
+          ],
+          "candidate_slower_blocks": 2
+        },
+        "candidate.function_over_simplejpeg": {
+          "median_percent": -0.273119584398096,
+          "range_percent": [
+            -0.8457624786041618,
+            1.929841348908079
+          ],
+          "candidate_slower_blocks": 4
+        },
+        "candidate.simple_over_baseline.simple": {
+          "median_percent": -0.4497291136447257,
+          "range_percent": [
+            -3.944898901266125,
+            1.033732980623503
+          ],
+          "candidate_slower_blocks": 3
+        },
+        "candidate.simple_over_simplejpeg": {
+          "median_percent": -0.6105297239804908,
+          "range_percent": [
+            -1.499531125948561,
+            1.18286422025895
+          ],
+          "candidate_slower_blocks": 3
+        },
+        "candidate.loader_over_baseline.loader": {
+          "median_percent": 0.1636345032026365,
+          "range_percent": [
+            -2.742739009820594,
+            4.496183059647296
+          ],
+          "candidate_slower_blocks": 6
+        },
+        "candidate.loader_over_simplejpeg": {
+          "median_percent": 0.7367421820004938,
+          "range_percent": [
+            -0.15923194209048752,
+            5.680041646814993
+          ],
+          "candidate_slower_blocks": 9
+        }
+      },
+      "blocks": [
+        {
+          "order": [
+            "candidate.loader",
+            "baseline.loader",
+            "candidate.function",
+            "simplejpeg",
+            "baseline.function",
+            "candidate.simple",
+            "baseline.simple",
+            "baseline.simple",
+            "candidate.simple",
+            "baseline.function",
+            "simplejpeg",
+            "candidate.function",
+            "baseline.loader",
+            "candidate.loader"
+          ],
+          "samples": {
+            "candidate.loader": [
+              {
+                "wall_us": 1118.2108984375,
+                "cpu_us": 1117.05875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1003.766828125,
+                "cpu_us": 1003.717109375,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 1022.94503125,
+                "cpu_us": 1022.9442578125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1007.7298359375,
+                "cpu_us": 1007.72603125,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 998.5436015625,
+                "cpu_us": 998.5148515625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1004.754953125,
+                "cpu_us": 1004.753890625,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 1000.8763984375,
+                "cpu_us": 1000.7255546875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1007.0502578125,
+                "cpu_us": 1007.01540625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 1007.5849453125,
+                "cpu_us": 1007.578640625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 998.4215,
+                "cpu_us": 998.4170859375,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.simple": [
+              {
+                "wall_us": 995.468453125,
+                "cpu_us": 995.4290625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 984.0648046875,
+                "cpu_us": 984.06140625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 996.2519765625,
+                "cpu_us": 996.245984375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 991.671625,
+                "cpu_us": 991.6611328125,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.loader": 1060.98886328125,
+            "baseline.loader": 1015.33743359375,
+            "candidate.function": 1001.6492773437501,
+            "simplejpeg": 1003.9633281250001,
+            "baseline.function": 1003.00322265625,
+            "candidate.simple": 989.7666289062499,
+            "baseline.simple": 993.96180078125
+          },
+          "cpu_us": {
+            "candidate.loader": 1060.3879296875,
+            "baseline.loader": 1015.3351445312501,
+            "candidate.function": 1001.63437109375,
+            "simplejpeg": 1003.87048046875,
+            "baseline.function": 1002.99786328125,
+            "candidate.simple": 989.745234375,
+            "baseline.simple": 993.95355859375
+          }
+        },
+        {
+          "order": [
+            "baseline.function",
+            "simplejpeg",
+            "baseline.simple",
+            "candidate.function",
+            "candidate.simple",
+            "baseline.loader",
+            "candidate.loader",
+            "candidate.loader",
+            "baseline.loader",
+            "candidate.simple",
+            "candidate.function",
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.function"
+          ],
+          "samples": {
+            "baseline.function": [
+              {
+                "wall_us": 996.4648046875,
+                "cpu_us": 996.5010703125,
+                "minor_faults": 1
+              },
+              {
+                "wall_us": 1001.782265625,
+                "cpu_us": 1001.779640625,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 988.78096875,
+                "cpu_us": 988.776109375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 998.297125,
+                "cpu_us": 998.2715078125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 991.5225859375,
+                "cpu_us": 991.52275,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 989.5385,
+                "cpu_us": 989.5344921875,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 985.2621640625,
+                "cpu_us": 985.2575625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 985.00996875,
+                "cpu_us": 984.9757109375,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.simple": [
+              {
+                "wall_us": 984.7617578125,
+                "cpu_us": 984.7359609375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 986.841890625,
+                "cpu_us": 986.8441328125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 1003.17484375,
+                "cpu_us": 1003.17053125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 993.17825,
+                "cpu_us": 993.1747578125,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 1002.700265625,
+                "cpu_us": 1002.695265625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 996.89609375,
+                "cpu_us": 996.8555703125,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "baseline.function": 999.12353515625,
+            "simplejpeg": 993.539046875,
+            "baseline.simple": 990.5305429687501,
+            "candidate.function": 985.1360664062499,
+            "candidate.simple": 985.80182421875,
+            "baseline.loader": 998.176546875,
+            "candidate.loader": 999.7981796875
+          },
+          "cpu_us": {
+            "baseline.function": 999.1403554687499,
+            "simplejpeg": 993.52380859375,
+            "baseline.simple": 990.52862109375,
+            "candidate.function": 985.11663671875,
+            "candidate.simple": 985.7900468749999,
+            "baseline.loader": 998.17264453125,
+            "candidate.loader": 999.77541796875
+          }
+        },
+        {
+          "order": [
+            "candidate.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.simple",
+            "candidate.loader",
+            "candidate.function",
+            "baseline.function",
+            "baseline.function",
+            "candidate.function",
+            "candidate.loader",
+            "baseline.simple",
+            "baseline.loader",
+            "simplejpeg",
+            "candidate.simple"
+          ],
+          "samples": {
+            "candidate.simple": [
+              {
+                "wall_us": 998.32396875,
+                "cpu_us": 998.324734375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 990.2810078125,
+                "cpu_us": 990.25246875,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 1000.639859375,
+                "cpu_us": 1000.594765625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 983.0704140625,
+                "cpu_us": 983.0697890625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 1002.3104609375,
+                "cpu_us": 1002.2821484375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1020.7651015625,
+                "cpu_us": 1020.76259375,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 991.8980703125,
+                "cpu_us": 991.8990859375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 995.1526953125,
+                "cpu_us": 995.1465078125,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 1011.7164765625,
+                "cpu_us": 1011.7120234375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1000.1441484375,
+                "cpu_us": 1000.123015625,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 994.349609375,
+                "cpu_us": 994.317671875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 998.2308203125,
+                "cpu_us": 998.1839921875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 1014.707328125,
+                "cpu_us": 1014.67859375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 991.2998203125,
+                "cpu_us": 991.296859375,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.simple": 994.3024882812499,
+            "simplejpeg": 991.85513671875,
+            "baseline.loader": 1011.5377812500001,
+            "baseline.simple": 993.5253828125,
+            "candidate.loader": 1005.9303125,
+            "candidate.function": 996.2902148437499,
+            "baseline.function": 1003.0035742187499
+          },
+          "cpu_us": {
+            "candidate.simple": 994.2886015625,
+            "simplejpeg": 991.8322773437501,
+            "baseline.loader": 1011.52237109375,
+            "baseline.simple": 993.522796875,
+            "candidate.loader": 1005.91751953125,
+            "candidate.function": 996.25083203125,
+            "baseline.function": 1002.9877265625
+          }
+        },
+        {
+          "order": [
+            "baseline.loader",
+            "baseline.function",
+            "baseline.simple",
+            "simplejpeg",
+            "candidate.loader",
+            "candidate.simple",
+            "candidate.function",
+            "candidate.function",
+            "candidate.simple",
+            "candidate.loader",
+            "simplejpeg",
+            "baseline.simple",
+            "baseline.function",
+            "baseline.loader"
+          ],
+          "samples": {
+            "baseline.loader": [
+              {
+                "wall_us": 1007.4351328125,
+                "cpu_us": 1007.4275859375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1040.9742578125,
+                "cpu_us": 1034.5936171875,
+                "minor_faults": 10
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 1004.0864140625,
+                "cpu_us": 1004.0822421875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1007.174796875,
+                "cpu_us": 1007.152453125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 1027.109359375,
+                "cpu_us": 1027.070046875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1010.346609375,
+                "cpu_us": 1010.3454765625,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 997.7547578125,
+                "cpu_us": 997.7529453125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 989.1194296875,
+                "cpu_us": 989.0851328125,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 1000.417953125,
+                "cpu_us": 1000.385078125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 991.8089140625,
+                "cpu_us": 991.805078125,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.simple": [
+              {
+                "wall_us": 977.7178125,
+                "cpu_us": 977.7180390625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 979.362578125,
+                "cpu_us": 979.3644765625,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 983.426328125,
+                "cpu_us": 983.42428125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 987.1595234375,
+                "cpu_us": 987.125359375,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "baseline.loader": 1024.2046953125,
+            "baseline.function": 1005.63060546875,
+            "baseline.simple": 1018.727984375,
+            "simplejpeg": 993.43709375,
+            "candidate.loader": 996.11343359375,
+            "candidate.simple": 978.5401953125,
+            "candidate.function": 985.29292578125
+          },
+          "cpu_us": {
+            "baseline.loader": 1021.0106015625,
+            "baseline.function": 1005.61734765625,
+            "baseline.simple": 1018.7077617187499,
+            "simplejpeg": 993.4190390624999,
+            "candidate.loader": 996.095078125,
+            "candidate.simple": 978.5412578125,
+            "candidate.function": 985.2748203125
+          }
+        },
+        {
+          "order": [
+            "baseline.loader",
+            "simplejpeg",
+            "candidate.simple",
+            "candidate.function",
+            "candidate.loader",
+            "baseline.function",
+            "baseline.simple",
+            "baseline.simple",
+            "baseline.function",
+            "candidate.loader",
+            "candidate.function",
+            "candidate.simple",
+            "simplejpeg",
+            "baseline.loader"
+          ],
+          "samples": {
+            "baseline.loader": [
+              {
+                "wall_us": 999.3117109375,
+                "cpu_us": 998.0358203125,
+                "minor_faults": 1
+              },
+              {
+                "wall_us": 976.7276484375,
+                "cpu_us": 976.6756953125,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 982.0682734375,
+                "cpu_us": 982.060078125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 985.104359375,
+                "cpu_us": 985.02815625,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.simple": [
+              {
+                "wall_us": 966.771984375,
+                "cpu_us": 966.76084375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 991.3590703125,
+                "cpu_us": 991.3586171875,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 966.978078125,
+                "cpu_us": 966.9392265625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 988.212078125,
+                "cpu_us": 988.21178125,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 974.796234375,
+                "cpu_us": 974.784015625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 989.24403125,
+                "cpu_us": 989.2150703125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 975.1696015625,
+                "cpu_us": 975.1188671875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 973.4109453125,
+                "cpu_us": 973.4064296875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 971.8543125,
+                "cpu_us": 971.8480390625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 974.1065625,
+                "cpu_us": 974.0494296875,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "baseline.loader": 988.0196796875,
+            "simplejpeg": 983.58631640625,
+            "candidate.simple": 979.06552734375,
+            "candidate.function": 977.595078125,
+            "candidate.loader": 982.0201328125,
+            "baseline.function": 974.2902734375,
+            "baseline.simple": 972.9804375
+          },
+          "cpu_us": {
+            "baseline.loader": 987.3557578125001,
+            "simplejpeg": 983.5441171875,
+            "candidate.simple": 979.0597304687501,
+            "candidate.function": 977.57550390625,
+            "candidate.loader": 981.99954296875,
+            "baseline.function": 974.2626484375,
+            "baseline.simple": 972.948734375
+          }
+        },
+        {
+          "order": [
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.function",
+            "baseline.loader",
+            "candidate.simple",
+            "candidate.function",
+            "candidate.loader",
+            "candidate.loader",
+            "candidate.function",
+            "candidate.simple",
+            "baseline.loader",
+            "baseline.function",
+            "simplejpeg",
+            "baseline.simple"
+          ],
+          "samples": {
+            "baseline.simple": [
+              {
+                "wall_us": 973.2401484375,
+                "cpu_us": 973.23259375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 976.701265625,
+                "cpu_us": 976.667078125,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 973.596375,
+                "cpu_us": 973.59021875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 973.4710625,
+                "cpu_us": 973.408625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 977.1735703125,
+                "cpu_us": 977.1399140625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 992.4005078125,
+                "cpu_us": 992.3959453125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 992.5645703125,
+                "cpu_us": 992.5617265625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 992.5625390625,
+                "cpu_us": 992.5406796875,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.simple": [
+              {
+                "wall_us": 973.127203125,
+                "cpu_us": 973.068921875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 996.9713984375,
+                "cpu_us": 996.920609375,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 1002.6328671875,
+                "cpu_us": 1002.5513984375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 982.0098828125,
+                "cpu_us": 982.0034921875,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 992.3719453125,
+                "cpu_us": 992.0875546875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 986.967828125,
+                "cpu_us": 986.9317890625,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "baseline.simple": 974.97070703125,
+            "simplejpeg": 973.5337187499999,
+            "baseline.function": 984.7870390625001,
+            "baseline.loader": 992.5635546875001,
+            "candidate.simple": 985.04930078125,
+            "candidate.function": 992.321375,
+            "candidate.loader": 989.6698867187499
+          },
+          "cpu_us": {
+            "baseline.simple": 974.9498359375,
+            "simplejpeg": 973.499421875,
+            "baseline.function": 984.7679296875,
+            "baseline.loader": 992.551203125,
+            "candidate.simple": 984.994765625,
+            "candidate.function": 992.2774453125,
+            "candidate.loader": 989.509671875
+          }
+        },
+        {
+          "order": [
+            "baseline.simple",
+            "baseline.loader",
+            "candidate.function",
+            "baseline.function",
+            "simplejpeg",
+            "candidate.loader",
+            "candidate.simple",
+            "candidate.simple",
+            "candidate.loader",
+            "simplejpeg",
+            "baseline.function",
+            "candidate.function",
+            "baseline.loader",
+            "baseline.simple"
+          ],
+          "samples": {
+            "baseline.simple": [
+              {
+                "wall_us": 977.678359375,
+                "cpu_us": 977.60421875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 1000.109875,
+                "cpu_us": 1000.0785625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 977.956,
+                "cpu_us": 977.8320078125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 982.1130546875,
+                "cpu_us": 982.1120546875,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 975.3264609375,
+                "cpu_us": 975.242609375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 974.1843671875,
+                "cpu_us": 974.1375625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 978.129921875,
+                "cpu_us": 978.042625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 980.9325234375,
+                "cpu_us": 980.857203125,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 976.6809921875,
+                "cpu_us": 976.654859375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 979.0048671875,
+                "cpu_us": 979.0004375,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 989.5875,
+                "cpu_us": 989.5849765625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 979.5400234375,
+                "cpu_us": 979.4640390625,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.simple": [
+              {
+                "wall_us": 969.9580390625,
+                "cpu_us": 969.9449375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 970.836515625,
+                "cpu_us": 970.8078828125,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "baseline.simple": 988.8941171875,
+            "baseline.loader": 980.03452734375,
+            "candidate.function": 974.7554140625,
+            "baseline.function": 979.5312226562501,
+            "simplejpeg": 977.8429296875,
+            "candidate.loader": 984.56376171875,
+            "candidate.simple": 970.3972773437499
+          },
+          "cpu_us": {
+            "baseline.simple": 988.841390625,
+            "baseline.loader": 979.97203125,
+            "candidate.function": 974.6900859375,
+            "baseline.function": 979.4499140625,
+            "simplejpeg": 977.8276484375,
+            "candidate.loader": 984.5245078124999,
+            "candidate.simple": 970.37641015625
+          }
+        },
+        {
+          "order": [
+            "candidate.loader",
+            "baseline.simple",
+            "candidate.simple",
+            "baseline.function",
+            "simplejpeg",
+            "baseline.loader",
+            "candidate.function",
+            "candidate.function",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.function",
+            "candidate.simple",
+            "baseline.simple",
+            "candidate.loader"
+          ],
+          "samples": {
+            "candidate.loader": [
+              {
+                "wall_us": 980.202140625,
+                "cpu_us": 980.1396796875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 977.9948984375,
+                "cpu_us": 977.8918046875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 987.4187734375,
+                "cpu_us": 987.358921875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 975.70921875,
+                "cpu_us": 975.646171875,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.simple": [
+              {
+                "wall_us": 972.1651328125,
+                "cpu_us": 972.0806640625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 975.8604453125,
+                "cpu_us": 975.8298046875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 986.4199140625,
+                "cpu_us": 986.3373984375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 978.3717109375,
+                "cpu_us": 978.3659609375,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 972.640265625,
+                "cpu_us": 972.634984375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 970.1251640625,
+                "cpu_us": 970.1136875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 977.7798828125,
+                "cpu_us": 977.7472265625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 977.195171875,
+                "cpu_us": 977.1382734375,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 973.924578125,
+                "cpu_us": 973.918640625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 987.62525,
+                "cpu_us": 987.6182421875,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.loader": 979.09851953125,
+            "baseline.simple": 981.56399609375,
+            "candidate.simple": 974.0127890625,
+            "baseline.function": 982.3958124999999,
+            "simplejpeg": 971.3827148437499,
+            "baseline.loader": 977.48752734375,
+            "candidate.function": 980.7749140625001
+          },
+          "cpu_us": {
+            "candidate.loader": 979.0157421875,
+            "baseline.simple": 981.502546875,
+            "candidate.simple": 973.9552343749999,
+            "baseline.function": 982.3516796875,
+            "simplejpeg": 971.3743359375001,
+            "baseline.loader": 977.4427499999999,
+            "candidate.function": 980.76844140625
+          }
+        },
+        {
+          "order": [
+            "candidate.function",
+            "candidate.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.function",
+            "candidate.simple",
+            "baseline.simple",
+            "baseline.simple",
+            "candidate.simple",
+            "baseline.function",
+            "simplejpeg",
+            "baseline.loader",
+            "candidate.loader",
+            "candidate.function"
+          ],
+          "samples": {
+            "candidate.function": [
+              {
+                "wall_us": 970.5223984375,
+                "cpu_us": 970.5175,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 983.5358359375,
+                "cpu_us": 983.434296875,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 995.6941171875,
+                "cpu_us": 995.64509375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 989.6821328125,
+                "cpu_us": 989.599453125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 984.3539453125,
+                "cpu_us": 984.3278515625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 976.01159375,
+                "cpu_us": 975.9546484375,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 984.2472578125,
+                "cpu_us": 984.2466875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 985.642265625,
+                "cpu_us": 985.614796875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 991.482203125,
+                "cpu_us": 991.3907890625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 992.381484375,
+                "cpu_us": 992.3734140625,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.simple": [
+              {
+                "wall_us": 967.567484375,
+                "cpu_us": 967.4983203125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 974.103671875,
+                "cpu_us": 974.1076640625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 974.6781953125,
+                "cpu_us": 974.5944375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 974.037609375,
+                "cpu_us": 974.002859375,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.function": 977.0291171875,
+            "candidate.loader": 992.6881249999999,
+            "baseline.loader": 980.18276953125,
+            "simplejpeg": 984.94476171875,
+            "baseline.function": 991.93184375,
+            "candidate.simple": 970.835578125,
+            "baseline.simple": 974.35790234375
+          },
+          "cpu_us": {
+            "candidate.function": 976.9758984375001,
+            "candidate.loader": 992.6222734375,
+            "baseline.loader": 980.14125,
+            "simplejpeg": 984.9307421875001,
+            "baseline.function": 991.8821015625,
+            "candidate.simple": 970.8029921875,
+            "baseline.simple": 974.2986484375
+          }
+        },
+        {
+          "order": [
+            "candidate.loader",
+            "candidate.function",
+            "baseline.function",
+            "baseline.simple",
+            "candidate.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "candidate.simple",
+            "baseline.simple",
+            "baseline.function",
+            "candidate.function",
+            "candidate.loader"
+          ],
+          "samples": {
+            "candidate.loader": [
+              {
+                "wall_us": 981.299546875,
+                "cpu_us": 981.249265625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 975.322078125,
+                "cpu_us": 975.312265625,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 988.604609375,
+                "cpu_us": 988.5427109375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 975.5871953125,
+                "cpu_us": 975.5596875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 985.1754375,
+                "cpu_us": 985.1020390625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 988.491671875,
+                "cpu_us": 988.4865859375,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 984.321390625,
+                "cpu_us": 984.3141484375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 975.1188828125,
+                "cpu_us": 975.1158046875,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.simple": [
+              {
+                "wall_us": 969.43165625,
+                "cpu_us": 969.32878125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 967.2447578125,
+                "cpu_us": 967.2344609375,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 969.2785546875,
+                "cpu_us": 969.2711796875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 975.2635234375,
+                "cpu_us": 975.2621015625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 976.1228203125,
+                "cpu_us": 976.0045078125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 973.760359375,
+                "cpu_us": 973.7482421875,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.loader": 978.3108125,
+            "candidate.function": 982.0959023437499,
+            "baseline.function": 986.8335546875,
+            "baseline.simple": 979.72013671875,
+            "candidate.simple": 968.33820703125,
+            "simplejpeg": 972.2710390625,
+            "baseline.loader": 974.9415898437501
+          },
+          "cpu_us": {
+            "candidate.loader": 978.280765625,
+            "candidate.function": 982.0511992187501,
+            "baseline.function": 986.7943124999999,
+            "baseline.simple": 979.7149765624999,
+            "candidate.simple": 968.28162109375,
+            "simplejpeg": 972.266640625,
+            "baseline.loader": 974.876375
+          }
+        }
+      ]
+    }
+  ],
+  "complete": true
+}
