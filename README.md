@@ -32,8 +32,8 @@ shape `(height, width, 3)` and dtype `uint8`. The default order is RGB; `color="
 reverses the channels. Only `dtype="uint8"` is supported. Color, dtype, backend and
 limit-profile names are case-insensitive. Bytes paths are rejected; use the buffer
 APIs for encoded bytes. Decoding releases the GIL. The standalone buffer functions
-copy their input; `Loader.decode` borrows immutable `bytes` for the duration of the
-call and copies other buffer types before releasing the GIL.
+and `Loader.decode` borrow immutable `bytes` for the duration of the call and copy
+other buffer types, including read-only views, before releasing the GIL.
 
 - JPEG: baseline, progressive, grayscale and CMYK. CMYK may use the fallback
   decoder. Decoder rounding and chroma upsampling can produce small pixel

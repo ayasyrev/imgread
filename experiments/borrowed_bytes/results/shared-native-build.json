@@ -1,0 +1,20 @@
+{
+  "native_version": "3.1.0",
+  "native_source": "/home/albu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/turbojpeg-sys-1.2.0/libjpeg-turbo",
+  "native_library": "/tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0.4.0",
+  "native_compile_flags": "-O3 -DNDEBUG -fno-lto",
+  "simd": true,
+  "compiler": "gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "simplejpeg_commit": "7f770a9af295b6cffef254b913af446cf51e6247",
+  "simplejpeg_source_sha256": {
+    "__init__.py": "1778f8c2aa2b6b9a41de6845a721585fb769f3b56579550681c5492ece055816",
+    "_color.c": "ce0d24e115e099bdb52e2914893631fa62caaf06fb58d891672c33f59b15323a",
+    "_color.h": "00f1de7a4a5141ad039646fbcb1716ae0afbb9e3ffa0c5687a3ecde2813899bb",
+    "_jpeg.pyx": "8d04ec8c6cb3dbf5eb54f0bab04a40c44cc23ee25332ec3aa3f3566b67a8d3f0"
+  },
+  "simplejpeg_extension": "/tmp/imgread-common-core-20261004/simplejpeg-source/simplejpeg/_jpeg.cpython-312-x86_64-linux-gnu.so",
+  "cython": "3.1.0",
+  "numpy_headers": "2.5.3",
+  "setuptools": "83.0.0",
+  "ldd": "\tlinux-vdso.so.1 (0x0000771e2d42c000)\n\tlibturbojpeg.so.0 => /tmp/imgread-common-core-20261004/native/lib/libturbojpeg.so.0 (0x0000771e2d2e5000)\n\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x0000771e2d000000)\n\t/lib64/ld-linux-x86-64.so.2 (0x0000771e2d42e000)\n"
+}

@@ -1,0 +1,2476 @@
+{
+  "schema_version": 1,
+  "complete": true,
+  "created_at": "2026-10-04T17:50:19.596933+00:00",
+  "command": [
+    "experiments/variable_sizes/prepare.py"
+  ],
+  "source_manifest": "/home/albu/Prj/AYA/imgread_benchmark/worktree/ram-image-codecs/results/ram-codecs-20261001-simple/manifest.json",
+  "source_manifest_copy": "source-manifest.json",
+  "source_root": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val",
+  "count_per_case": 64,
+  "identity_selection": "first count entries of the existing ordered manifest; identical across cases",
+  "native_recipe": "Original JPEG bytes copied exactly; no decode/reencode, EXIF rotation or geometry change; RGB and grayscale inputs decoded to RGB",
+  "resized_recipe": "Original source; EXIF transpose; RGB without ICC; bilinear short side=max(target width,height); Python round; floor center crop; reducing_gap=None",
+  "encoder": "Resized cases: Pillow JPEG Q50/Q90, subsampling=2, progressive=False, optimize=False",
+  "dimensions": [
+    128,
+    192,
+    255,
+    256,
+    257,
+    384,
+    511,
+    512,
+    513,
+    768,
+    1024
+  ],
+  "width_index": "ordinal % 11",
+  "height_index": "(3*ordinal + ordinal//11) % 11",
+  "versions": {
+    "python": "3.12.13",
+    "pillow": "12.3.0",
+    "pillow_libjpeg_turbo": "3.1.4.1",
+    "numpy": "2.5.2",
+    "simplejpeg": "1.9.0"
+  },
+  "preparation_code": [
+    {
+      "path": "/home/albu/Prj/AYA/imgread/worktree/jpeg-common-core-diagnosis-20261004/experiments/variable_sizes/prepare.py",
+      "sha256": "1cb3e261b8863a5c5513c23828d705fe9c52545e04da7bbf7c448acc717d5969"
+    },
+    {
+      "path": "/home/albu/Prj/AYA/imgread/worktree/jpeg-common-core-diagnosis-20261004/experiments/public_api/prepare.py",
+      "sha256": "798c94914e37e93e94044e41092f1eb3f80797e07ac99f550e957a59bc6637f8"
+    }
+  ],
+  "validation": "Every file: JPEG metadata and full RGB simplejpeg decode. Public-route pixel equality is checked by run.py before its timer.",
+  "cases": [
+    {
+      "name": "native-original",
+      "quality": null,
+      "subsampling": "source",
+      "progressive": "source",
+      "optimize": null,
+      "count": 64,
+      "encoded_bytes": 7320797,
+      "entries": [
+        {
+          "ordinal": 0,
+          "source_ordinal": 0,
+          "source_identity": "n03445777/n03445777_7310.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03445777/n03445777_7310.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0000.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 31125,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 1,
+          "source_ordinal": 1,
+          "source_identity": "n03028079/n03028079_12090.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03028079/n03028079_12090.JPEG",
+          "source_shape": [
+            500,
+            375,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0001.jpg",
+          "shape": [
+            500,
+            375,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 164464,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              375
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 2,
+          "source_ordinal": 2,
+          "source_identity": "n03425413/n03425413_7471.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03425413/n03425413_7471.JPEG",
+          "source_shape": [
+            598,
+            400,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0002.jpg",
+          "shape": [
+            598,
+            400,
+            3
+          ],
+          "decoded_bytes": 717600,
+          "encoded_bytes": 308909,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              598,
+              400
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 3,
+          "source_ordinal": 3,
+          "source_identity": "n03888257/n03888257_18742.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03888257/n03888257_18742.JPEG",
+          "source_shape": [
+            334,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0003.jpg",
+          "shape": [
+            334,
+            500,
+            3
+          ],
+          "decoded_bytes": 501000,
+          "encoded_bytes": 67541,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              334,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 4,
+          "source_ordinal": 4,
+          "source_identity": "n03028079/n03028079_28352.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03028079/n03028079_28352.JPEG",
+          "source_shape": [
+            393,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0004.jpg",
+          "shape": [
+            393,
+            500,
+            3
+          ],
+          "decoded_bytes": 589500,
+          "encoded_bytes": 209005,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              393,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 5,
+          "source_ordinal": 5,
+          "source_identity": "n01440764/n01440764_2121.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n01440764/n01440764_2121.JPEG",
+          "source_shape": [
+            480,
+            640,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0005.jpg",
+          "shape": [
+            480,
+            640,
+            3
+          ],
+          "decoded_bytes": 921600,
+          "encoded_bytes": 102716,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              480,
+              640
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 6,
+          "source_ordinal": 6,
+          "source_identity": "n02979186/n02979186_4830.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02979186/n02979186_4830.JPEG",
+          "source_shape": [
+            231,
+            307,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0006.jpg",
+          "shape": [
+            231,
+            307,
+            3
+          ],
+          "decoded_bytes": 212751,
+          "encoded_bytes": 26383,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              231,
+              307
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 7,
+          "source_ordinal": 7,
+          "source_identity": "n03394916/n03394916_33942.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03394916/n03394916_33942.JPEG",
+          "source_shape": [
+            333,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0007.jpg",
+          "shape": [
+            333,
+            500,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 119738,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              333,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 8,
+          "source_ordinal": 8,
+          "source_identity": "n03394916/n03394916_24532.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03394916/n03394916_24532.JPEG",
+          "source_shape": [
+            525,
+            700,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0008.jpg",
+          "shape": [
+            525,
+            700,
+            3
+          ],
+          "decoded_bytes": 1102500,
+          "encoded_bytes": 59683,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              525,
+              700
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 9,
+          "source_ordinal": 9,
+          "source_identity": "n03028079/n03028079_19002.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03028079/n03028079_19002.JPEG",
+          "source_shape": [
+            500,
+            328,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0009.jpg",
+          "shape": [
+            500,
+            328,
+            3
+          ],
+          "decoded_bytes": 492000,
+          "encoded_bytes": 96101,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              328
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 10,
+          "source_ordinal": 10,
+          "source_identity": "n03888257/n03888257_33471.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03888257/n03888257_33471.JPEG",
+          "source_shape": [
+            333,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0010.jpg",
+          "shape": [
+            333,
+            500,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 65524,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              333,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 11,
+          "source_ordinal": 11,
+          "source_identity": "n03445777/n03445777_13490.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03445777/n03445777_13490.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0011.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 129442,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 12,
+          "source_ordinal": 12,
+          "source_identity": "n03445777/n03445777_5582.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03445777/n03445777_5582.JPEG",
+          "source_shape": [
+            146,
+            220,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0012.jpg",
+          "shape": [
+            146,
+            220,
+            3
+          ],
+          "decoded_bytes": 96360,
+          "encoded_bytes": 11169,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              146,
+              220
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 13,
+          "source_ordinal": 13,
+          "source_identity": "n03000684/n03000684_15690.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03000684/n03000684_15690.JPEG",
+          "source_shape": [
+            333,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0013.jpg",
+          "shape": [
+            333,
+            500,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 109357,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              333,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 14,
+          "source_ordinal": 14,
+          "source_identity": "n03394916/n03394916_11571.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03394916/n03394916_11571.JPEG",
+          "source_shape": [
+            450,
+            450,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0014.jpg",
+          "shape": [
+            450,
+            450,
+            3
+          ],
+          "decoded_bytes": 607500,
+          "encoded_bytes": 29425,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              450,
+              450
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 15,
+          "source_ordinal": 15,
+          "source_identity": "n03000684/n03000684_6640.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03000684/n03000684_6640.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0015.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 130302,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 16,
+          "source_ordinal": 16,
+          "source_identity": "n03417042/n03417042_12601.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03417042/n03417042_12601.JPEG",
+          "source_shape": [
+            333,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0016.jpg",
+          "shape": [
+            333,
+            500,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 91332,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              333,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 17,
+          "source_ordinal": 17,
+          "source_identity": "n03888257/n03888257_19462.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03888257/n03888257_19462.JPEG",
+          "source_shape": [
+            500,
+            472,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0017.jpg",
+          "shape": [
+            500,
+            472,
+            3
+          ],
+          "decoded_bytes": 708000,
+          "encoded_bytes": 92184,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              472
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 18,
+          "source_ordinal": 18,
+          "source_identity": "n03888257/n03888257_29512.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03888257/n03888257_29512.JPEG",
+          "source_shape": [
+            300,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0018.jpg",
+          "shape": [
+            300,
+            500,
+            3
+          ],
+          "decoded_bytes": 450000,
+          "encoded_bytes": 43122,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              300,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 19,
+          "source_ordinal": 19,
+          "source_identity": "n02979186/n02979186_15931.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02979186/n02979186_15931.JPEG",
+          "source_shape": [
+            400,
+            300,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0019.jpg",
+          "shape": [
+            400,
+            300,
+            3
+          ],
+          "decoded_bytes": 360000,
+          "encoded_bytes": 55194,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              400,
+              300
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 20,
+          "source_ordinal": 20,
+          "source_identity": "n03394916/n03394916_32661.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03394916/n03394916_32661.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0020.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 148176,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 21,
+          "source_ordinal": 21,
+          "source_identity": "n02102040/n02102040_3931.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02102040/n02102040_3931.JPEG",
+          "source_shape": [
+            333,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0021.jpg",
+          "shape": [
+            333,
+            500,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 130397,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              333,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 22,
+          "source_ordinal": 22,
+          "source_identity": "n03000684/n03000684_1011.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03000684/n03000684_1011.JPEG",
+          "source_shape": [
+            385,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0022.jpg",
+          "shape": [
+            385,
+            500,
+            3
+          ],
+          "decoded_bytes": 577500,
+          "encoded_bytes": 165275,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              385,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 23,
+          "source_ordinal": 23,
+          "source_identity": "n02102040/n02102040_3950.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02102040/n02102040_3950.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0023.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 51598,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 24,
+          "source_ordinal": 24,
+          "source_identity": "n03425413/n03425413_7022.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03425413/n03425413_7022.JPEG",
+          "source_shape": [
+            600,
+            500,
+            3
+          ],
+          "source_mode": "L",
+          "path": "native-original/0024.jpg",
+          "shape": [
+            600,
+            500,
+            3
+          ],
+          "decoded_bytes": 900000,
+          "encoded_bytes": 43074,
+          "jpeg": {
+            "mode": "L",
+            "sampling": -1,
+            "progressive": false,
+            "encoded_shape": [
+              600,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 25,
+          "source_ordinal": 25,
+          "source_identity": "n02102040/ILSVRC2012_val_00007032.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02102040/ILSVRC2012_val_00007032.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0025.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 151959,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 26,
+          "source_ordinal": 26,
+          "source_identity": "n03417042/n03417042_28702.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03417042/n03417042_28702.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0026.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 142479,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 27,
+          "source_ordinal": 27,
+          "source_identity": "n03445777/n03445777_20061.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03445777/n03445777_20061.JPEG",
+          "source_shape": [
+            500,
+            333,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0027.jpg",
+          "shape": [
+            500,
+            333,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 73406,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              333
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 28,
+          "source_ordinal": 28,
+          "source_identity": "n02979186/n02979186_3010.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02979186/n02979186_3010.JPEG",
+          "source_shape": [
+            280,
+            280,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0028.jpg",
+          "shape": [
+            280,
+            280,
+            3
+          ],
+          "decoded_bytes": 235200,
+          "encoded_bytes": 9141,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              280,
+              280
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 29,
+          "source_ordinal": 29,
+          "source_identity": "n03888257/n03888257_30332.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03888257/n03888257_30332.JPEG",
+          "source_shape": [
+            333,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0029.jpg",
+          "shape": [
+            333,
+            500,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 34971,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              333,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 30,
+          "source_ordinal": 30,
+          "source_identity": "n03394916/n03394916_41871.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03394916/n03394916_41871.JPEG",
+          "source_shape": [
+            500,
+            429,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0030.jpg",
+          "shape": [
+            500,
+            429,
+            3
+          ],
+          "decoded_bytes": 643500,
+          "encoded_bytes": 136013,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              429
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 31,
+          "source_ordinal": 31,
+          "source_identity": "n03425413/n03425413_16420.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03425413/n03425413_16420.JPEG",
+          "source_shape": [
+            500,
+            375,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0031.jpg",
+          "shape": [
+            500,
+            375,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 121961,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              375
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 32,
+          "source_ordinal": 32,
+          "source_identity": "n03445777/n03445777_3311.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03445777/n03445777_3311.JPEG",
+          "source_shape": [
+            321,
+            480,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0032.jpg",
+          "shape": [
+            321,
+            480,
+            3
+          ],
+          "decoded_bytes": 462240,
+          "encoded_bytes": 122365,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              321,
+              480
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 33,
+          "source_ordinal": 33,
+          "source_identity": "n03417042/n03417042_20892.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03417042/n03417042_20892.JPEG",
+          "source_shape": [
+            450,
+            600,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0033.jpg",
+          "shape": [
+            450,
+            600,
+            3
+          ],
+          "decoded_bytes": 810000,
+          "encoded_bytes": 32525,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              450,
+              600
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 34,
+          "source_ordinal": 34,
+          "source_identity": "n03888257/n03888257_25460.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03888257/n03888257_25460.JPEG",
+          "source_shape": [
+            333,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0034.jpg",
+          "shape": [
+            333,
+            500,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 45161,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              333,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 35,
+          "source_ordinal": 35,
+          "source_identity": "n02102040/n02102040_4650.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02102040/n02102040_4650.JPEG",
+          "source_shape": [
+            600,
+            800,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0035.jpg",
+          "shape": [
+            600,
+            800,
+            3
+          ],
+          "decoded_bytes": 1440000,
+          "encoded_bytes": 132594,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              600,
+              800
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 36,
+          "source_ordinal": 36,
+          "source_identity": "n03000684/n03000684_1692.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03000684/n03000684_1692.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0036.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 178048,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 37,
+          "source_ordinal": 37,
+          "source_identity": "n02102040/n02102040_1030.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02102040/n02102040_1030.JPEG",
+          "source_shape": [
+            333,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0037.jpg",
+          "shape": [
+            333,
+            500,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 101925,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              333,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 38,
+          "source_ordinal": 38,
+          "source_identity": "n03425413/n03425413_21040.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03425413/n03425413_21040.JPEG",
+          "source_shape": [
+            500,
+            384,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0038.jpg",
+          "shape": [
+            500,
+            384,
+            3
+          ],
+          "decoded_bytes": 576000,
+          "encoded_bytes": 185295,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              384
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 39,
+          "source_ordinal": 39,
+          "source_identity": "n01440764/n01440764_7362.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n01440764/n01440764_7362.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0039.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 283290,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 40,
+          "source_ordinal": 40,
+          "source_identity": "n03888257/n03888257_22330.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03888257/n03888257_22330.JPEG",
+          "source_shape": [
+            250,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0040.jpg",
+          "shape": [
+            250,
+            500,
+            3
+          ],
+          "decoded_bytes": 375000,
+          "encoded_bytes": 46025,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              250,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 41,
+          "source_ordinal": 41,
+          "source_identity": "n03445777/n03445777_8192.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03445777/n03445777_8192.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0041.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 156193,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 42,
+          "source_ordinal": 42,
+          "source_identity": "n03425413/n03425413_13752.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03425413/n03425413_13752.JPEG",
+          "source_shape": [
+            500,
+            375,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0042.jpg",
+          "shape": [
+            500,
+            375,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 173094,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              375
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 43,
+          "source_ordinal": 43,
+          "source_identity": "n03000684/n03000684_2562.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03000684/n03000684_2562.JPEG",
+          "source_shape": [
+            300,
+            400,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0043.jpg",
+          "shape": [
+            300,
+            400,
+            3
+          ],
+          "decoded_bytes": 360000,
+          "encoded_bytes": 130080,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              300,
+              400
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 44,
+          "source_ordinal": 44,
+          "source_identity": "n03028079/n03028079_99351.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03028079/n03028079_99351.JPEG",
+          "source_shape": [
+            374,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0044.jpg",
+          "shape": [
+            374,
+            500,
+            3
+          ],
+          "decoded_bytes": 561000,
+          "encoded_bytes": 216023,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              374,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 45,
+          "source_ordinal": 45,
+          "source_identity": "n03394916/n03394916_58402.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03394916/n03394916_58402.JPEG",
+          "source_shape": [
+            338,
+            506,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0045.jpg",
+          "shape": [
+            338,
+            506,
+            3
+          ],
+          "decoded_bytes": 513084,
+          "encoded_bytes": 49910,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              338,
+              506
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 46,
+          "source_ordinal": 46,
+          "source_identity": "n02102040/n02102040_1112.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02102040/n02102040_1112.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0046.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 226618,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 47,
+          "source_ordinal": 47,
+          "source_identity": "n03000684/n03000684_5970.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03000684/n03000684_5970.JPEG",
+          "source_shape": [
+            415,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0047.jpg",
+          "shape": [
+            415,
+            500,
+            3
+          ],
+          "decoded_bytes": 622500,
+          "encoded_bytes": 162900,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              415,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 48,
+          "source_ordinal": 48,
+          "source_identity": "n03028079/n03028079_34851.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03028079/n03028079_34851.JPEG",
+          "source_shape": [
+            361,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0048.jpg",
+          "shape": [
+            361,
+            500,
+            3
+          ],
+          "decoded_bytes": 541500,
+          "encoded_bytes": 160742,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              361,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 49,
+          "source_ordinal": 49,
+          "source_identity": "n03000684/n03000684_1821.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03000684/n03000684_1821.JPEG",
+          "source_shape": [
+            295,
+            480,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0049.jpg",
+          "shape": [
+            295,
+            480,
+            3
+          ],
+          "decoded_bytes": 424800,
+          "encoded_bytes": 23778,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              295,
+              480
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 50,
+          "source_ordinal": 50,
+          "source_identity": "n03417042/n03417042_26850.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03417042/n03417042_26850.JPEG",
+          "source_shape": [
+            500,
+            375,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0050.jpg",
+          "shape": [
+            500,
+            375,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 104555,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              375
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 51,
+          "source_ordinal": 51,
+          "source_identity": "n03417042/n03417042_5852.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03417042/n03417042_5852.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0051.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 115464,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 52,
+          "source_ordinal": 52,
+          "source_identity": "n03888257/n03888257_31301.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03888257/n03888257_31301.JPEG",
+          "source_shape": [
+            681,
+            456,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0052.jpg",
+          "shape": [
+            681,
+            456,
+            3
+          ],
+          "decoded_bytes": 931608,
+          "encoded_bytes": 104059,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              681,
+              456
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 53,
+          "source_ordinal": 53,
+          "source_identity": "n02979186/n02979186_12122.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02979186/n02979186_12122.JPEG",
+          "source_shape": [
+            125,
+            100,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0053.jpg",
+          "shape": [
+            125,
+            100,
+            3
+          ],
+          "decoded_bytes": 37500,
+          "encoded_bytes": 3562,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 2,
+            "progressive": false,
+            "encoded_shape": [
+              125,
+              100
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 54,
+          "source_ordinal": 54,
+          "source_identity": "n03394916/n03394916_51752.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03394916/n03394916_51752.JPEG",
+          "source_shape": [
+            500,
+            333,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0054.jpg",
+          "shape": [
+            500,
+            333,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 121347,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              333
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 55,
+          "source_ordinal": 55,
+          "source_identity": "n03394916/n03394916_11582.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03394916/n03394916_11582.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0055.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 196331,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 56,
+          "source_ordinal": 56,
+          "source_identity": "n03028079/n03028079_4612.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03028079/n03028079_4612.JPEG",
+          "source_shape": [
+            500,
+            390,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0056.jpg",
+          "shape": [
+            500,
+            390,
+            3
+          ],
+          "decoded_bytes": 585000,
+          "encoded_bytes": 201746,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              390
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 57,
+          "source_ordinal": 57,
+          "source_identity": "n03888257/ILSVRC2012_val_00032482.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03888257/ILSVRC2012_val_00032482.JPEG",
+          "source_shape": [
+            500,
+            409,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0057.jpg",
+          "shape": [
+            500,
+            409,
+            3
+          ],
+          "decoded_bytes": 613500,
+          "encoded_bytes": 130814,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              409
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 58,
+          "source_ordinal": 58,
+          "source_identity": "n03394916/n03394916_36941.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03394916/n03394916_36941.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0058.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 172773,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 59,
+          "source_ordinal": 59,
+          "source_identity": "n02979186/n02979186_5162.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n02979186/n02979186_5162.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0059.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 157754,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 60,
+          "source_ordinal": 60,
+          "source_identity": "n01440764/n01440764_5861.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n01440764/n01440764_5861.JPEG",
+          "source_shape": [
+            500,
+            374,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0060.jpg",
+          "shape": [
+            500,
+            374,
+            3
+          ],
+          "decoded_bytes": 561000,
+          "encoded_bytes": 181542,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              374
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 61,
+          "source_ordinal": 61,
+          "source_identity": "n03445777/n03445777_261.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03445777/n03445777_261.JPEG",
+          "source_shape": [
+            500,
+            333,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0061.jpg",
+          "shape": [
+            500,
+            333,
+            3
+          ],
+          "decoded_bytes": 499500,
+          "encoded_bytes": 40672,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              500,
+              333
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 62,
+          "source_ordinal": 62,
+          "source_identity": "n03888257/n03888257_33481.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03888257/n03888257_33481.JPEG",
+          "source_shape": [
+            375,
+            500,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0062.jpg",
+          "shape": [
+            375,
+            500,
+            3
+          ],
+          "decoded_bytes": 562500,
+          "encoded_bytes": 88125,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              375,
+              500
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        },
+        {
+          "ordinal": 63,
+          "source_ordinal": 63,
+          "source_identity": "n03394916/n03394916_48881.JPEG",
+          "source_path": "/data_pool/20260908_imagenette_imagewoof/imagenette/imagenette2/val/n03394916/n03394916_48881.JPEG",
+          "source_shape": [
+            600,
+            600,
+            3
+          ],
+          "source_mode": "RGB",
+          "path": "native-original/0063.jpg",
+          "shape": [
+            600,
+            600,
+            3
+          ],
+          "decoded_bytes": 1080000,
+          "encoded_bytes": 124321,
+          "jpeg": {
+            "mode": "RGB",
+            "sampling": 0,
+            "progressive": false,
+            "encoded_shape": [
+              600,
+              600
+            ],
+            "exif_orientation": 1
+          },
+          "original_bytes_preserved": true,
+          "exif_rotation_applied": false,
+          "upscaled": false,
+          "resized": false
+        }
+      ],
+      "shapes": [
+        [
+          125,
+          100,
+          3
+        ],
+        [
+          146,
+          220,
+          3
+        ],
+        [
+          231,
+          307,
+          3
+        ],
+        [
+          250,
+          500,
+          3
+        ],
+        [
+          280,
+          280,
+          3
+        ],
+        [
+          295,
+          480,
+          3
+        ],
+        [
+          300,
+          400,
+          3
+        ],
+        [
+          300,
+          500,
+          3
+        ],
+        [
+          321,
+          480,
+          3
+        ],
+        [
+          333,
+          500,
+          3
+        ],
+        [
+          334,
+          500,
+          3
+        ],
+        [
+          338,
+          506,
+          3
+        ],
+        [
+          361,
+          500,
+          3
+        ],
+        [
+          374,
+          500,
+          3
+        ],
+        [
+          375,
+          500,
+          3
+        ],
+        [
+          385,
+          500,
+          3
+        ],
+        [
+          393,
+          500,
+          3
+        ],
+        [
+          400,
+          300,
+          3
+        ],
+        [
+          415,
+          500,
+          3
+        ],
+        [
+          450,
+          450,
+          3
+        ],
+        [
+          450,
+          600,
+          3
+        ],
+        [
+          480,
+          640,
+          3
+        ],
+        [
+          500,
+          328,
+          3
+        ],
+        [
+          500,
+          333,
+          3
+        ],
+        [
+          500,
+          374,
+          3
+        ],
+        [
+          500,
+          375,
+          3
+        ],
+        [
+          500,
+          384,
+          3
+        ],
+        [
+          500,
+          390,
+          3
+        ],
+        [
+          500,
+          409,
+          3
+        ],
+        [
+          500,
+          429,
+          3
+        ],
+        [
+          500,
+          472,
+          3
+        ],
+        [
+          525,
+          700,
+          3
+        ],
+        [
+          598,
+          400,
+          3
+        ],
+        [
+          600,
+          500,
+          3
+        ],
+        [
+          600,
+          600,
+          3
+        ],
+        [
+          600,
+          800,
+          3
+        ],
+        [
+          681,
+          456,
+          3
+        ]
+      ],
+      "decoded_byte_sizes": [
+        37500,
+        96360,
+        212751,
+        235200,
+        360000,
+        375000,
+        424800,
+        450000,
+        462240,
+        492000,
+        499500,
+        501000,
+        513084,
+        541500,
+        561000,
+        562500,
+        576000,
+        577500,
+        585000,
+        589500,
+        607500,
+        613500,
+        622500,
+        643500,
+        708000,
+        717600,
+        810000,
+        900000,
+        921600,
+        931608,
+        1080000,
+        1102500,
+        1440000
+      ],
+      "decoded_bytes": 36354243,
+      "upscaled_sources": 0,
+      "modes": {
+        "RGB": 63,
+        "L": 1
+      },
+      "sampling_counts": {
+        "0": 51,
+        "2": 12,
+        "-1": 1
+      },
+      "progressive_count": 0
+    }
+  ],
+  "validated_jpegs": 192,
+  "encoded_bytes": 11163903,
+  "scope_note": "Extract of the existing manifest; only native-original is used by this worktree.",
+  "source_commit": "142edb7"
+}
