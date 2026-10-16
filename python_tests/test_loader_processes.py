@@ -23,15 +23,19 @@ def probe(*args):
         assert process.returncode == 0, stdout + stderr
         return json.loads(stdout)
     finally:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(process.pid, signal.SIGTERM)
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            pass
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(process.pid, signal.SIGKILL)
-        process.wait()
+        # communicate() reaps a completed probe. Signal its process group only
+        # if communication was interrupted or timed out; a finished group's ID
+        # may no longer exist or may already have been reused.
+        if process.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
 
 
 @pytest.mark.parametrize("method", mp.get_all_start_methods())
