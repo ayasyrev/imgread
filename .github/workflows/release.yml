@@ -43,7 +43,7 @@ jobs:
           uv run --no-project python - <<'PY'
           import os, tomllib
           from pathlib import Path
-          version = tomllib.loads(Path('Cargo.toml').read_text())['package']['version'].replace('-beta.', 'b')
+          version = tomllib.loads(Path('Cargo.toml').read_text())['package']['version'].replace('-beta.', 'b').replace('-dev.', '.dev')
           assert os.environ['GITHUB_REF'] == 'refs/tags/v' + version, 'Run against the immutable release tag'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write('version=' + version + '\n')

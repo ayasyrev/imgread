@@ -130,7 +130,7 @@ jobs:
           uv run --no-sync python - <<'PY'
           import tomllib
           from pathlib import Path
-          version = tomllib.loads(Path('Cargo.toml').read_text())['package']['version'].replace('-beta.', 'b')
+          version = tomllib.loads(Path('Cargo.toml').read_text())['package']['version'].replace('-beta.', 'b').replace('-dev.', '.dev')
           platforms = (
               'manylinux_2_17_x86_64.manylinux2014_x86_64',
               'macosx_10_13_x86_64',

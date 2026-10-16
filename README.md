@@ -225,10 +225,10 @@ the full package matrix without publishing.
 1. Update `Cargo.toml`, its root `Cargo.lock` entry and `CHANGELOG.md`, then merge
    the reviewed changes into `main`.
 2. Permit the release tag in the GitHub `pypi` environment deployment policy.
-   Currently only `v0.2.1` is allowed. Keep its required reviewer enabled.
+   For this release, add the exact tag `v0.3.0`. Keep its required reviewer enabled.
 3. Create and push an annotated tag matching the package version, for example
-   `git tag -a v0.2.1 -m 'Release imgread 0.2.1'` followed by
-   `git push origin v0.2.1`. These commands assume that tag does not exist yet.
+   `git tag -a v0.3.0 -m 'Release imgread 0.3.0'` followed by
+   `git push origin v0.3.0`. These commands assume that tag does not exist yet.
 4. **Publish release** checks the tag/version and runs CI. It builds and tests
    12 wheels (CPython 3.11–3.14; Linux x86_64 and macOS x86_64/arm64), rebuilds
    the sdist, validates package metadata and saves SHA256SUMS.
