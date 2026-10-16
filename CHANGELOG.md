@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add `encode_jpeg(image, ...)` using the optional `imgread[jpegli]` extra to
+  prepare JPEG caches from RGB/BGR uint8 arrays. Sequential JPEG is the default;
+  quality, chroma subsampling and progressive level are configurable.
+- Speed up Loader's JPEG table-independence check with vectorized marker search,
+  preserving checks across all scans and the existing decoder/pixel settings.
+
 ## 0.2.1 — 2026-09-16
 
 - Add `imgread.Loader` for repeated decoding with fixed options:

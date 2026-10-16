@@ -17,3 +17,7 @@ This software is based in part on the work of the Independent JPEG Group.
 NumPy is an independently installed Python dependency and carries its own license
 notices. It is not bundled in imgread. No additional non-system native shared
 libraries are permitted in release wheels without a new inventory and notices.
+
+The optional `jpegli` extra installs ajpegli separately for encoding. ajpegli and
+its bundled jpegli dependencies carry their own notices; they are not bundled in
+imgread wheels.

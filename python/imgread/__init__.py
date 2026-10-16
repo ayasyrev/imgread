@@ -8,8 +8,9 @@ from ._native import (
     load_numpy_simple_from_bytes,
     supported_backends,
 )
+from ._encode import encode_jpeg
 
 __all__ = [
     "Loader", "__version__", "load_numpy", "load_numpy_from_bytes", "load_numpy_simple",
-    "load_numpy_simple_from_bytes", "supported_backends",
+    "load_numpy_simple_from_bytes", "supported_backends", "encode_jpeg",
 ]
