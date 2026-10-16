@@ -5,6 +5,7 @@ use image::{ColorType, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Rgb
 use crate::{
     error::ImgReadError,
     limits::{allocate_bytes, arithmetic_limit, DecodeLimits},
+    output::{NumpyImage, RgbOutput},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,8 +40,8 @@ pub struct DecodeFallbackWarning {
 }
 
 #[derive(Debug)]
-pub struct DecodeOutput {
-    pub image: DynamicImage,
+pub struct DecodeOutput<I = DynamicImage> {
+    pub image: I,
     pub fallback_warning: Option<DecodeFallbackWarning>,
     pub is_bgr: bool,
 }
@@ -97,20 +98,31 @@ impl DecoderWorkspace {
         simple: bool,
         limits: DecodeLimits,
     ) -> Result<DecodeOutput, ImgReadError> {
-        let bytes = self.input.read(path, limits)?;
-        self.native
-            .decode_bytes(&bytes, Some(path), backend, bgr, simple, limits)
+        self.decode_path_into(path, backend, bgr, simple, limits)
     }
 
-    pub(crate) fn decode_buffer(
+    pub(crate) fn decode_path_into<O: RgbOutput>(
+        &mut self,
+        path: &Path,
+        backend: DecodeBackend,
+        bgr: bool,
+        simple: bool,
+        limits: DecodeLimits,
+    ) -> Result<DecodeOutput<O>, ImgReadError> {
+        let bytes = self.input.read(path, limits)?;
+        self.native
+            .decode_bytes_into(&bytes, Some(path), backend, bgr, simple, limits)
+    }
+
+    pub(crate) fn decode_buffer_into<O: RgbOutput>(
         &mut self,
         bytes: &[u8],
         backend: DecodeBackend,
         bgr: bool,
         limits: DecodeLimits,
-    ) -> Result<DecodeOutput, ImgReadError> {
+    ) -> Result<DecodeOutput<O>, ImgReadError> {
         self.native
-            .decode_bytes(bytes, None, backend, bgr, false, limits)
+            .decode_bytes_into(bytes, None, backend, bgr, false, limits)
     }
 }
 
@@ -226,11 +238,11 @@ pub fn decode_bytes(
     simple: bool,
     limits: DecodeLimits,
 ) -> Result<DecodeOutput, ImgReadError> {
-    NativeWorkspace::default().decode_bytes(bytes, path, backend, bgr, simple, limits)
+    NativeWorkspace::default().decode_bytes_into(bytes, path, backend, bgr, simple, limits)
 }
 
 impl NativeWorkspace {
-    fn decode_bytes(
+    fn decode_bytes_into<O: RgbOutput>(
         &mut self,
         bytes: &[u8],
         path: Option<&Path>,
@@ -238,7 +250,7 @@ impl NativeWorkspace {
         bgr: bool,
         simple: bool,
         limits: DecodeLimits,
-    ) -> Result<DecodeOutput, ImgReadError> {
+    ) -> Result<DecodeOutput<O>, ImgReadError> {
         limits.check_input(u64::try_from(bytes.len()).map_err(|_| arithmetic_limit())?)?;
         if simple && !bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
             return Err(ImgReadError::UnsupportedFormat(
@@ -255,7 +267,7 @@ impl NativeWorkspace {
         if backend != DecodeBackend::Image {
             if format == ImageFormat::Jpeg {
                 #[cfg(feature = "turbojpeg")]
-                match self.slot.decode(bytes, bgr, limits, self.reuse) {
+                match self.slot.decode_into(bytes, bgr, limits, self.reuse) {
                     Ok(image) => {
                         return Ok(DecodeOutput {
                             image,
@@ -292,11 +304,31 @@ impl NativeWorkspace {
             }
         }
         Ok(DecodeOutput {
-            image,
+            image: O::from_image(image),
             fallback_warning: fallback.map(|message| DecodeFallbackWarning { message }),
             is_bgr: bgr,
         })
     }
+}
+
+pub(crate) fn decode_numpy_bytes(
+    bytes: &[u8],
+    backend: DecodeBackend,
+    bgr: bool,
+    simple: bool,
+    limits: DecodeLimits,
+) -> Result<DecodeOutput<NumpyImage>, ImgReadError> {
+    NativeWorkspace::default().decode_bytes_into(bytes, None, backend, bgr, simple, limits)
+}
+
+pub(crate) fn decode_numpy_path(
+    path: &Path,
+    backend: DecodeBackend,
+    bgr: bool,
+    simple: bool,
+    limits: DecodeLimits,
+) -> Result<DecodeOutput<NumpyImage>, ImgReadError> {
+    DecoderWorkspace::new(0, false).decode_path_into(path, backend, bgr, simple, limits)
 }
 
 pub fn decode_path(

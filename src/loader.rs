@@ -93,30 +93,34 @@ impl Loader {
         }
         Ok(state)
     }
+    fn with_workspace<T>(&self, decode: impl FnOnce(&mut DecoderWorkspace) -> T) -> PyResult<T> {
+        // Admission excludes every other workspace user. Move the workspace
+        // out of its mutex before NumPy allocation can reacquire the GIL and
+        // invoke an allocator callback. A panic drops the state and leaves None,
+        // so the next admitted operation starts with fresh decoding state.
+        let mut state = self.workspace()?.take().expect("initialized workspace");
+        let result = decode(&mut state.decoder);
+        let mut slot = self
+            .workspace
+            .try_lock()
+            .expect("admitted workspace is unlocked");
+        *slot = Some(state);
+        Ok(result)
+    }
     fn load(&self, py: Python<'_>, path: &Path) -> PyResult<Py<PyAny>> {
         let result = py.detach(|| {
-            let mut state = self.workspace()?;
-            Ok::<_, PyErr>(
-                state
-                    .as_mut()
-                    .expect("initialized workspace")
-                    .decoder
-                    .decode_path(path, self.backend, self.bgr, false, self.limits),
-            )
+            self.with_workspace(|decoder| {
+                decoder.decode_path_into(path, self.backend, self.bgr, false, self.limits)
+            })
         })?;
-        // Neither mutex nor input lease survives into Python callbacks/conversion.
+        // Neither mutex nor input lease survives into fallback warnings/conversion.
         to_numpy(py, result)
     }
     fn load_buffer(&self, py: Python<'_>, bytes: &[u8]) -> PyResult<Py<PyAny>> {
         let result = py.detach(|| {
-            let mut state = self.workspace()?;
-            Ok::<_, PyErr>(
-                state
-                    .as_mut()
-                    .expect("initialized workspace")
-                    .decoder
-                    .decode_buffer(bytes, self.backend, self.bgr, self.limits),
-            )
+            self.with_workspace(|decoder| {
+                decoder.decode_buffer_into(bytes, self.backend, self.bgr, self.limits)
+            })
         })?;
         to_numpy(py, result)
     }
