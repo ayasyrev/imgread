@@ -1,0 +1,2912 @@
+{
+  "complete": true,
+  "prepared": "/home/albu/Prj/AYA/imgread_benchmark/worktree/ram-image-codecs/results/ram-codecs-20261001-simple/prepared.npy",
+  "shape": [
+    2000,
+    256,
+    256,
+    3
+  ],
+  "cpu_affinity": [
+    7
+  ],
+  "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+  "python": "3.12.13",
+  "imgread_version": "0.2.1",
+  "versions": {
+    "numpy": "2.5.2",
+    "ajpegli": "1.0.0",
+    "simplejpeg": "1.9.0"
+  },
+  "jpegli_commit": "7cdf212790241868c77dca777dbee14e98128cba",
+  "baseline_label": "2096de5",
+  "baseline_native": "tmp/jpegli-cache/baseline/imgread/_native.cpython-312-x86_64-linux-gnu.so",
+  "rounds": 5,
+  "contract": "Immutable encoded bytes in RAM -> new writable contiguous RGB uint8 NumPy array; single CPU. Encode, validation, warmup and I/O excluded. RAM lookup, public call and output disposal included. Five AB/BA rounds by default. Decoder fast modes disabled. Warnings treated as errors outside the timed loop.",
+  "rows": [
+    {
+      "encoder": "jpegli",
+      "quality": 50,
+      "subsampling": "420",
+      "progressive": 0,
+      "bytes_per_image": 6763.6125,
+      "encode_seconds": 0.8006694289506413,
+      "mae": 4.981298207600911,
+      "psnr": 30.269627547691936,
+      "max_difference_from_current_loader": {
+        "imgread_function": 0,
+        "imgread_loader": 0,
+        "simplejpeg": 0,
+        "baseline_function": 0,
+        "baseline_loader": 0
+      },
+      "timing": [
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 250265792,
+          "images_per_second": 7991.503689005967
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 245452202,
+          "images_per_second": 8148.22594258087
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 247564341,
+          "images_per_second": 8078.707910522542
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 246990859,
+          "images_per_second": 8097.465663698915
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 248492057,
+          "images_per_second": 8048.547000437926
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 248159213,
+          "images_per_second": 8059.342128877561
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 247186012,
+          "images_per_second": 8091.07272623501
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 247686984,
+          "images_per_second": 8074.707712537693
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 245070155,
+          "images_per_second": 8160.928449243442
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 250054199,
+          "images_per_second": 7998.266007922546
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 221939579,
+          "images_per_second": 9011.461628482228
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 221902548,
+          "images_per_second": 9012.96545725108
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 223951507,
+          "images_per_second": 8930.504763247698
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 218326623,
+          "images_per_second": 9160.586888205567
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 222393532,
+          "images_per_second": 8993.067298378084
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 222702300,
+          "images_per_second": 8980.598763461356
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 218608379,
+          "images_per_second": 9148.780157232673
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 224069071,
+          "images_per_second": 8925.819128334762
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 221923728,
+          "images_per_second": 9012.10527609738
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 222213830,
+          "images_per_second": 9000.339897836242
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 246874278,
+          "images_per_second": 8101.289515467464
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 248548865,
+          "images_per_second": 8046.707435175776
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 250279237,
+          "images_per_second": 7991.074385447323
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 245073772,
+          "images_per_second": 8160.8080035590265
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 247564772,
+          "images_per_second": 8078.693845827143
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 248520821,
+          "images_per_second": 8047.615455125187
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 245197768,
+          "images_per_second": 8156.681099968251
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 249950452,
+          "images_per_second": 8001.585850302843
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 248200281,
+          "images_per_second": 8058.0086047525465
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 246999757,
+          "images_per_second": 8097.173957948468
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 221721323,
+          "images_per_second": 9020.332248333192
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 218280275,
+          "images_per_second": 9162.53197866825
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 223971054,
+          "images_per_second": 8929.72535638467
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 221935551,
+          "images_per_second": 9011.625181222093
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 222189465,
+          "images_per_second": 9001.32686308957
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 222108590,
+          "images_per_second": 9004.604459467326
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 221940010,
+          "images_per_second": 9011.444128528245
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 223933172,
+          "images_per_second": 8931.235967130408
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 217972099,
+          "images_per_second": 9175.486262578956
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 221371739,
+          "images_per_second": 9034.57690233892
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 244889100,
+          "images_per_second": 8166.96210652087
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 246969129,
+          "images_per_second": 8098.178133024877
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 247317131,
+          "images_per_second": 8086.783118958307
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 250283034,
+          "images_per_second": 7990.953154259749
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 248158612,
+          "images_per_second": 8059.361647299994
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 248215441,
+          "images_per_second": 8057.516454022697
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 250576723,
+          "images_per_second": 7981.587340018011
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 247307362,
+          "images_per_second": 8087.102558637134
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 246893053,
+          "images_per_second": 8100.673452322694
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 245108899,
+          "images_per_second": 8159.638463391735
+        }
+      ],
+      "throughput": {
+        "imgread_function": {
+          "median": 8100.981483895079,
+          "min": 8091.07272623501,
+          "max": 9034.57690233892
+        },
+        "imgread_loader": {
+          "median": 8059.351888088777,
+          "min": 8046.707435175776,
+          "max": 9011.625181222093
+        },
+        "simplejpeg": {
+          "median": 8163.945277882156,
+          "min": 8148.22594258087,
+          "max": 9175.486262578956
+        },
+        "baseline_function": {
+          "median": 8086.9428387977205,
+          "min": 8047.615455125187,
+          "max": 9004.604459467326
+        },
+        "baseline_loader": {
+          "median": 7999.925929112695,
+          "min": 7981.587340018011,
+          "max": 8931.235967130408
+        }
+      },
+      "paired_speedup": {
+        "baseline_loader": [
+          1.007386915571564,
+          1.0087068317424532,
+          1.0070066411347187,
+          1.0090761135641797,
+          1.0090369429523747
+        ],
+        "simplejpeg": [
+          0.9876595241566583,
+          0.9837479419188697,
+          0.9869600057651634,
+          0.9828258465439597,
+          0.9871547395326886
+        ]
+      }
+    },
+    {
+      "encoder": "jpegli",
+      "quality": 75,
+      "subsampling": "420",
+      "progressive": 0,
+      "bytes_per_image": 10325.286,
+      "encode_seconds": 0.7457343509886414,
+      "mae": 3.753839762369792,
+      "psnr": 32.829935552022434,
+      "max_difference_from_current_loader": {
+        "imgread_function": 0,
+        "imgread_loader": 0,
+        "simplejpeg": 0,
+        "baseline_function": 0,
+        "baseline_loader": 0
+      },
+      "timing": [
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 257522571,
+          "images_per_second": 7766.30954030045
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 263025944,
+          "images_per_second": 7603.812648991006
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 263011337,
+          "images_per_second": 7604.234945963565
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 265086475,
+          "images_per_second": 7544.707816571932
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 261338873,
+          "images_per_second": 7652.899000601415
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 261358941,
+          "images_per_second": 7652.3113858193965
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 264922994,
+          "images_per_second": 7549.363570909968
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 263549801,
+          "images_per_second": 7588.6985776931015
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 263263906,
+          "images_per_second": 7596.939627568999
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 257745655,
+          "images_per_second": 7759.58764464914
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 265749066,
+          "images_per_second": 7525.896629115528
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 263131634,
+          "images_per_second": 7600.758485769902
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 262072650,
+          "images_per_second": 7631.471654901799
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 257020405,
+          "images_per_second": 7781.483341760356
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 262059835,
+          "images_per_second": 7631.8448418469015
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 261861147,
+          "images_per_second": 7637.635529030964
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 257125516,
+          "images_per_second": 7778.302329201743
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 262010512,
+          "images_per_second": 7633.281522689441
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 267994949,
+          "images_per_second": 7462.827219180164
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 265041570,
+          "images_per_second": 7545.986088144588
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 262922426,
+          "images_per_second": 7606.8064273832615
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 261376385,
+          "images_per_second": 7651.800678167617
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 264024454,
+          "images_per_second": 7575.055907510749
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 262845270,
+          "images_per_second": 7609.039340901969
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 264913266,
+          "images_per_second": 7549.640794508192
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 264873500,
+          "images_per_second": 7550.774237513379
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 268934207,
+          "images_per_second": 7436.763148542126
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 257620096,
+          "images_per_second": 7763.36951601788
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 261745037,
+          "images_per_second": 7641.0235812799765
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 263314133,
+          "images_per_second": 7595.490516264845
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 272914481,
+          "images_per_second": 7328.302963887065
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 257120255,
+          "images_per_second": 7778.46148293529
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 261706222,
+          "images_per_second": 7642.156860909482
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 261857670,
+          "images_per_second": 7637.736943126394
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 268225548,
+          "images_per_second": 7456.4112736941825
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 262567963,
+          "images_per_second": 7617.075507418245
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 262274203,
+          "images_per_second": 7625.607006419918
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 261925179,
+          "images_per_second": 7635.768381015404
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 263455982,
+          "images_per_second": 7591.400980221432
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 265160706,
+          "images_per_second": 7542.595696664045
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 262729830,
+          "images_per_second": 7612.382651791006
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 261286283,
+          "images_per_second": 7654.439326231297
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 265457712,
+          "images_per_second": 7534.156702141696
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 263471001,
+          "images_per_second": 7590.968237145765
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 257716361,
+          "images_per_second": 7760.469658346604
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 257526799,
+          "images_per_second": 7766.182035291791
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 263475610,
+          "images_per_second": 7590.835447728919
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 264909458,
+          "images_per_second": 7549.749318501116
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 261502284,
+          "images_per_second": 7648.116756028027
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 263072022,
+          "images_per_second": 7602.480814170349
+        }
+      ],
+      "throughput": {
+        "imgread_function": {
+          "median": 7610.710996346487,
+          "min": 7436.763148542126,
+          "max": 7637.736943126394
+        },
+        "imgread_loader": {
+          "median": 7645.136808468755,
+          "min": 7631.8448418469015,
+          "max": 7654.439326231297
+        },
+        "simplejpeg": {
+          "median": 7764.775775654836,
+          "min": 7575.055907510749,
+          "max": 7781.483341760356
+        },
+        "baseline_function": {
+          "median": 7593.229376705305,
+          "min": 7456.4112736941825,
+          "max": 7617.075507418245
+        },
+        "baseline_loader": {
+          "median": 7545.346952358261,
+          "min": 7328.302963887065,
+          "max": 7550.774237513379
+        }
+      },
+      "paired_speedup": {
+        "baseline_loader": [
+          1.0139883022353715,
+          1.0131120039777297,
+          1.012741485474858,
+          1.0275838805167454,
+          1.014496497204385
+        ],
+        "simplejpeg": [
+          0.9857860740928983,
+          0.9813424899253224,
+          0.9971768084083545,
+          0.9941654301209487,
+          0.9855670007412385
+        ]
+      }
+    },
+    {
+      "encoder": "jpegli",
+      "quality": 90,
+      "subsampling": "420",
+      "progressive": 0,
+      "bytes_per_image": 17446.1905,
+      "encode_seconds": 0.9404073629993945,
+      "mae": 2.5796191126505534,
+      "psnr": 35.87576258338677,
+      "max_difference_from_current_loader": {
+        "imgread_function": 0,
+        "imgread_loader": 0,
+        "simplejpeg": 0,
+        "baseline_function": 0,
+        "baseline_loader": 0
+      },
+      "timing": [
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 366997646,
+          "images_per_second": 5449.626235477271
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 366087795,
+          "images_per_second": 5463.170385125786
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 372035272,
+          "images_per_second": 5375.834364436284
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 359606541,
+          "images_per_second": 5561.634097195134
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 368745141,
+          "images_per_second": 5423.800282699861
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 369273627,
+          "images_per_second": 5416.038010209702
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 359905119,
+          "images_per_second": 5557.020154525782
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 372044199,
+          "images_per_second": 5375.705374188619
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 366406772,
+          "images_per_second": 5458.414398519905
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 367184752,
+          "images_per_second": 5446.849274394705
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 371910235,
+          "images_per_second": 5377.641731209683
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 366335035,
+          "images_per_second": 5459.483284201851
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 359590220,
+          "images_per_second": 5561.886527392207
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 367211584,
+          "images_per_second": 5446.451275349745
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 365691641,
+          "images_per_second": 5469.08864126867
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 365564228,
+          "images_per_second": 5470.9948261130185
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 367348744,
+          "images_per_second": 5444.417689366048
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 359621790,
+          "images_per_second": 5561.398267885826
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 366513966,
+          "images_per_second": 5456.817981118897
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 372085789,
+          "images_per_second": 5375.104503117694
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 361933239,
+          "images_per_second": 5525.880976076916
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 372059018,
+          "images_per_second": 5375.4912614428285
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 366614076,
+          "images_per_second": 5455.327907267805
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 367332523,
+          "images_per_second": 5444.65810886013
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 369090940,
+          "images_per_second": 5418.718758038331
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 369023000,
+          "images_per_second": 5419.716386241508
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 367448834,
+          "images_per_second": 5442.934675362176
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 366629255,
+          "images_per_second": 5455.102048525833
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 372036415,
+          "images_per_second": 5375.817848368419
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 359654924,
+          "images_per_second": 5560.8859118525515
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 366063659,
+          "images_per_second": 5463.530593185706
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 367359615,
+          "images_per_second": 5444.256576760622
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 359776715,
+          "images_per_second": 5559.003450237184
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 366125707,
+          "images_per_second": 5462.604678561946
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 371577131,
+          "images_per_second": 5382.462571411586
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 371898001,
+          "images_per_second": 5377.818634739045
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 366405370,
+          "images_per_second": 5458.435284395531
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 359918705,
+          "images_per_second": 5556.810391391023
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 372623672,
+          "images_per_second": 5367.345529244852
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 365807081,
+          "images_per_second": 5467.362727185699
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 372253598,
+          "images_per_second": 5372.681448199192
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 373983229,
+          "images_per_second": 5347.833391748163
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 366261084,
+          "images_per_second": 5460.585596912611
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 359569200,
+          "images_per_second": 5562.211668852616
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 372074187,
+          "images_per_second": 5375.272109376402
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 366747139,
+          "images_per_second": 5453.348608126429
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 359609526,
+          "images_per_second": 5561.587931905898
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 366458861,
+          "images_per_second": 5457.63853149126
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 369769590,
+          "images_per_second": 5408.773609533439
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 372080298,
+          "images_per_second": 5375.183826583583
+        }
+      ],
+      "throughput": {
+        "imgread_function": {
+          "median": 5444.537899113089,
+          "min": 5367.345529244852,
+          "max": 5453.348608126429
+        },
+        "imgread_loader": {
+          "median": 5421.7583344706845,
+          "min": 5347.833391748163,
+          "max": 5462.604678561946
+        },
+        "simplejpeg": {
+          "median": 5561.142089869189,
+          "min": 5525.880976076916,
+          "max": 5562.211668852616
+        },
+        "baseline_function": {
+          "median": 5461.877991019199,
+          "min": 5455.102048525833,
+          "max": 5470.9948261130185
+        },
+        "baseline_loader": {
+          "median": 5375.761611278519,
+          "min": 5372.681448199192,
+          "max": 5382.462571411586
+        }
+      },
+      "paired_speedup": {
+        "baseline_loader": [
+          1.0082121258466423,
+          1.0152105317531845,
+          1.0081037529246502,
+          1.0149400555739152,
+          1.000781277038763
+        ],
+        "simplejpeg": [
+          0.9749232556102151,
+          0.9813918133457346,
+          0.9776108049117729,
+          0.9824776621729593,
+          0.9669593279215524
+        ]
+      }
+    },
+    {
+      "encoder": "jpegli",
+      "quality": 95,
+      "subsampling": "420",
+      "progressive": 0,
+      "bytes_per_image": 25342.8455,
+      "encode_seconds": 1.1377360289916396,
+      "mae": 1.980198117574056,
+      "psnr": 37.62715431973405,
+      "max_difference_from_current_loader": {
+        "imgread_function": 0,
+        "imgread_loader": 0,
+        "simplejpeg": 0,
+        "baseline_function": 0,
+        "baseline_loader": 0
+      },
+      "timing": [
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 450081881,
+          "images_per_second": 4443.635890332586
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 459381668,
+          "images_per_second": 4353.678301329169
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 441550466,
+          "images_per_second": 4529.493577751087
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 448679982,
+          "images_per_second": 4457.520014788625
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 448383820,
+          "images_per_second": 4460.464251363932
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 448366557,
+          "images_per_second": 4460.635988067237
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 448678480,
+          "images_per_second": 4457.534936821575
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 441534075,
+          "images_per_second": 4529.661725428553
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 458060012,
+          "images_per_second": 4366.240116153164
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 449921175,
+          "images_per_second": 4445.2230993573485
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 451580192,
+          "images_per_second": 4428.892222092859
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 448209408,
+          "images_per_second": 4462.1999545355375
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 459014620,
+          "images_per_second": 4357.15969134055
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 448286685,
+          "images_per_second": 4461.430747156811
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 441807235,
+          "images_per_second": 4526.861132095313
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 441831110,
+          "images_per_second": 4526.616516433169
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 448377277,
+          "images_per_second": 4460.529341231536
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 459100152,
+          "images_per_second": 4356.3479369094175
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 448210059,
+          "images_per_second": 4462.193473440095
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 451217492,
+          "images_per_second": 4432.45227735985
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 457655573,
+          "images_per_second": 4370.09864621489
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 448175884,
+          "images_per_second": 4462.533731511533
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 449856852,
+          "images_per_second": 4445.858701736525
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 441680103,
+          "images_per_second": 4528.164131495867
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 448524367,
+          "images_per_second": 4459.066546099156
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 448365655,
+          "images_per_second": 4460.644961755601
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 441935097,
+          "images_per_second": 4525.551406929782
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 449877602,
+          "images_per_second": 4445.653642476737
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 448496745,
+          "images_per_second": 4459.341170915299
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 457654030,
+          "images_per_second": 4370.113380188087
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 459177850,
+          "images_per_second": 4355.610794379563
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 448188318,
+          "images_per_second": 4462.409928319462
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 448015649,
+          "images_per_second": 4464.129778645299
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 451551006,
+          "images_per_second": 4429.178483548767
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 441969944,
+          "images_per_second": 4525.194591060246
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 441957100,
+          "images_per_second": 4525.326100655471
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 451414706,
+          "images_per_second": 4430.515828166219
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 448715651,
+          "images_per_second": 4457.165680632789
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 448395833,
+          "images_per_second": 4460.34475079522
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 459177550,
+          "images_per_second": 4355.613640083231
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 458254172,
+          "images_per_second": 4364.390162060543
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 441720199,
+          "images_per_second": 4527.753099196625
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 449689605,
+          "images_per_second": 4447.512190102771
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 448327873,
+          "images_per_second": 4461.02087433676
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 448586566,
+          "images_per_second": 4458.448271944016
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 448604790,
+          "images_per_second": 4458.267153143862
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 450888115,
+          "images_per_second": 4435.69021552054
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 449732847,
+          "images_per_second": 4447.08455995877
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 442343194,
+          "images_per_second": 4521.376223548271
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 459443155,
+          "images_per_second": 4353.09565119106
+        }
+      ],
+      "throughput": {
+        "imgread_function": {
+          "median": 4460.496796297733,
+          "min": 4457.165680632789,
+          "max": 4464.129778645299
+        },
+        "imgread_loader": {
+          "median": 4444.429494844968,
+          "min": 4428.892222092859,
+          "max": 4447.512190102771
+        },
+        "simplejpeg": {
+          "median": 4526.738824264241,
+          "min": 4521.376223548271,
+          "max": 4529.661725428553
+        },
+        "baseline_function": {
+          "median": 4460.68281256599,
+          "min": 4435.69021552054,
+          "max": 4462.533731511533
+        },
+        "baseline_loader": {
+          "median": 4356.753814124984,
+          "min": 4353.09565119106,
+          "max": 4370.113380188087
+        }
+      },
+      "paired_speedup": {
+        "baseline_loader": [
+          1.0193761830959827,
+          1.016966246448634,
+          1.0173108286903505,
+          1.0170434910157475,
+          1.0203184554258826
+        ],
+        "simplejpeg": [
+          0.981201713830625,
+          0.9787778155177456,
+          0.9820844317694651,
+          0.9789154031576339,
+          0.9829234205062962
+        ]
+      }
+    },
+    {
+      "encoder": "jpegli",
+      "quality": 90,
+      "subsampling": "420",
+      "progressive": 2,
+      "bytes_per_image": 17074.4765,
+      "encode_seconds": 1.8707143850042485,
+      "mae": 2.5796191126505534,
+      "psnr": 35.87576258338677,
+      "max_difference_from_current_loader": {
+        "imgread_function": 0,
+        "imgread_loader": 0,
+        "simplejpeg": 0,
+        "baseline_function": 0,
+        "baseline_loader": 0
+      },
+      "timing": [
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 939171281,
+          "images_per_second": 2129.5370082765553
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 986684777,
+          "images_per_second": 2026.9898214918949
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 940507153,
+          "images_per_second": 2126.51226906724
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 944059603,
+          "images_per_second": 2118.510307659039
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 937345006,
+          "images_per_second": 2133.686089111142
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 937325488,
+          "images_per_second": 2133.730519019024
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 943958370,
+          "images_per_second": 2118.7375032227324
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 939892242,
+          "images_per_second": 2127.9035091769592
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 985997659,
+          "images_per_second": 2028.4023818356754
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 937778019,
+          "images_per_second": 2132.700873211659
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 948418268,
+          "images_per_second": 2108.7742270270146
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 937433333,
+          "images_per_second": 2133.4850485842494
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 940685903,
+          "images_per_second": 2126.1081872511063
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 942492982,
+          "images_per_second": 2122.031716093988
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 986814704,
+          "images_per_second": 2026.7229418989282
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 986137214,
+          "images_per_second": 2028.115328786284
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 946283184,
+          "images_per_second": 2113.532221449684
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 944033462,
+          "images_per_second": 2118.568970810486
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 943579860,
+          "images_per_second": 2119.587418917568
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 949457876,
+          "images_per_second": 2106.465226689004
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 950776945,
+          "images_per_second": 2103.542803091423
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 938469595,
+          "images_per_second": 2131.1292455883986
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 944762130,
+          "images_per_second": 2116.934979178304
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 987086030,
+          "images_per_second": 2026.165844936535
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 938604171,
+          "images_per_second": 2130.8236866976376
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 938452693,
+          "images_per_second": 2131.1676282866183
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 986654027,
+          "images_per_second": 2027.0529945346284
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 944286334,
+          "images_per_second": 2118.001635719955
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 938475386,
+          "images_per_second": 2131.116095142851
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 940048570,
+          "images_per_second": 2127.549643525334
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 936438981,
+          "images_per_second": 2135.750476623954
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 948338565,
+          "images_per_second": 2108.9514587018825
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 950685240,
+          "images_per_second": 2103.7457150381338
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 985729418,
+          "images_per_second": 2028.9543595623927
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 942641274,
+          "images_per_second": 2121.697887801166
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 943261574,
+          "images_per_second": 2120.3026341026375
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 985827625,
+          "images_per_second": 2028.7522374918233
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 941076276,
+          "images_per_second": 2125.2262446790232
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 947890873,
+          "images_per_second": 2109.9475234634947
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 937323405,
+          "images_per_second": 2133.7352607769353
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 938331132,
+          "images_per_second": 2131.44372151131
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 937236650,
+          "images_per_second": 2133.932769274441
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 987416238,
+          "images_per_second": 2025.4882622256412
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 941066757,
+          "images_per_second": 2125.247741590345
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 945713991,
+          "images_per_second": 2114.8042844171055
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 943423884,
+          "images_per_second": 2119.937849697263
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 939737859,
+          "images_per_second": 2128.2530876517553
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 985766669,
+          "images_per_second": 2028.877687687369
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 936577896,
+          "images_per_second": 2135.433698085055
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 938685306,
+          "images_per_second": 2130.639509552523
+        }
+      ],
+      "throughput": {
+        "imgread_function": {
+          "median": 2130.0882589145394,
+          "min": 2103.7457150381338,
+          "max": 2132.700873211659
+        },
+        "imgread_loader": {
+          "median": 2117.59763252692,
+          "min": 2103.542803091423,
+          "max": 2128.2530876517553
+        },
+        "simplejpeg": {
+          "median": 2027.5841616604562,
+          "min": 2025.4882622256412,
+          "max": 2028.9543595623927
+        },
+        "baseline_function": {
+          "median": 2133.708304065083,
+          "min": 2119.587418917568,
+          "max": 2135.750476623954
+        },
+        "baseline_loader": {
+          "median": 2118.6239054408857,
+          "min": 2113.532221449684,
+          "max": 2122.031716093988
+        }
+      },
+      "paired_speedup": {
+        "baseline_loader": [
+          1.0040515743731133,
+          0.9952051781520259,
+          0.9990601718741879,
+          0.994554145298529,
+          1.0044306882964391
+        ],
+        "simplejpeg": [
+          1.0490762979638164,
+          1.0395577837032974,
+          1.0438509747949958,
+          1.0397249422936128,
+          1.0491163676514499
+        ]
+      }
+    },
+    {
+      "encoder": "jpegli",
+      "quality": 90,
+      "subsampling": "444",
+      "progressive": 0,
+      "bytes_per_image": 19829.0585,
+      "encode_seconds": 1.1457098420360126,
+      "mae": 2.2921440505981447,
+      "psnr": 37.26625494694633,
+      "max_difference_from_current_loader": {
+        "imgread_function": 0,
+        "imgread_loader": 0,
+        "simplejpeg": 0,
+        "baseline_function": 0,
+        "baseline_loader": 0
+      },
+      "timing": [
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 506146369,
+          "images_per_second": 3951.426153567843
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 504091268,
+          "images_per_second": 3967.5354979566914
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 500193470,
+          "images_per_second": 3998.4528386586094
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 499327532,
+          "images_per_second": 4005.386989155647
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 503776469,
+          "images_per_second": 3970.014724923565
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 504716127,
+          "images_per_second": 3962.623528374
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 499572318,
+          "images_per_second": 4003.424385095733
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 500115091,
+          "images_per_second": 3999.0794838862403
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 503335860,
+          "images_per_second": 3973.489987381388
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 505687876,
+          "images_per_second": 3955.0088007251334
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 499154263,
+          "images_per_second": 4006.7773597277683
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 500015542,
+          "images_per_second": 3999.87566786474
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 502595361,
+          "images_per_second": 3979.3443298415164
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 505655274,
+          "images_per_second": 3955.2637989493214
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 502720850,
+          "images_per_second": 3978.351007323448
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 502650375,
+          "images_per_second": 3978.9087991827323
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 505217571,
+          "images_per_second": 3958.6905024726466
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 503030299,
+          "images_per_second": 3975.903646312963
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 500076097,
+          "images_per_second": 3999.3913166379557
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 499809480,
+          "images_per_second": 4001.524740987306
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 503760619,
+          "images_per_second": 3970.1396349125894
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 499669994,
+          "images_per_second": 4002.641791614167
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 502967298,
+          "images_per_second": 3976.4016625987483
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 500527325,
+          "images_per_second": 3995.785844459141
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 506073911,
+          "images_per_second": 3951.991905783106
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 506081354,
+          "images_per_second": 3951.933783357685
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 500192238,
+          "images_per_second": 3998.46268705993
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 503347563,
+          "images_per_second": 3973.3976024038084
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 499483630,
+          "images_per_second": 4004.1352306180684
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 503753275,
+          "images_per_second": 3970.1975138523912
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 499823907,
+          "images_per_second": 4001.4092403147097
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 502704058,
+          "images_per_second": 3978.4838975777675
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 505741668,
+          "images_per_second": 3954.5881356961872
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 502522783,
+          "images_per_second": 3979.9190557296583
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 500044337,
+          "images_per_second": 3999.6453354495243
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 500042082,
+          "images_per_second": 3999.663372331931
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 609476119,
+          "images_per_second": 3281.506752522981
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 1019028554,
+          "images_per_second": 1962.6535411097027
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 1012199930,
+          "images_per_second": 1975.8942287221853
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 1008049312,
+          "images_per_second": 1984.0299241233945
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 1002824309,
+          "images_per_second": 1994.3672905121011
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 1020738608,
+          "images_per_second": 1959.3654872315753
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 999650129,
+          "images_per_second": 2000.6999869051185
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 1016856421,
+          "images_per_second": 1966.8460155202188
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 1010775630,
+          "images_per_second": 1978.6784926739874
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 1012848264,
+          "images_per_second": 1974.6294396571134
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 1013746082,
+          "images_per_second": 1972.880621204709
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 1006159045,
+          "images_per_second": 1987.7573132585615
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 1015934757,
+          "images_per_second": 1968.6303536911082
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 594322953,
+          "images_per_second": 3365.173749229234
+        }
+      ],
+      "throughput": {
+        "imgread_function": {
+          "median": 3970.16857438249,
+          "min": 1966.8460155202188,
+          "max": 3978.9087991827323
+        },
+        "imgread_loader": {
+          "median": 3998.4577628592697,
+          "min": 1984.0299241233945,
+          "max": 4001.4092403147097
+        },
+        "simplejpeg": {
+          "median": 4002.0832663007363,
+          "min": 1987.7573132585615,
+          "max": 4006.7773597277683
+        },
+        "baseline_function": {
+          "median": 3971.7061636636868,
+          "min": 1974.6294396571134,
+          "max": 3979.9190557296583
+        },
+        "baseline_loader": {
+          "median": 3951.9628445703956,
+          "min": 1959.3654872315753,
+          "max": 3958.6905024726466
+        }
+      },
+      "paired_speedup": {
+        "baseline_loader": [
+          1.01152212872044,
+          1.0107802181115926,
+          1.011427479208778,
+          1.011205851252671,
+          1.275194475460961
+        ],
+        "simplejpeg": [
+          0.998591723539193,
+          0.9988722073497907,
+          0.99843518698155,
+          0.663243040859392,
+          1.255869901118736
+        ]
+      }
+    },
+    {
+      "encoder": "simplejpeg",
+      "quality": 90,
+      "subsampling": "420",
+      "progressive": 0,
+      "bytes_per_image": 20533.746,
+      "encode_seconds": 0.30582696199417114,
+      "mae": 2.6724875157674153,
+      "psnr": 35.52316025517498,
+      "max_difference_from_current_loader": {
+        "imgread_function": 0,
+        "imgread_loader": 0,
+        "simplejpeg": 0,
+        "baseline_function": 0,
+        "baseline_loader": 0
+      },
+      "timing": [
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 412257543,
+          "images_per_second": 4851.3363404972315
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 409283664,
+          "images_per_second": 4886.58643360855
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 419327667,
+          "images_per_second": 4769.539807159922
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 402905807,
+          "images_per_second": 4963.939375537469
+        },
+        {
+          "round": 0,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 410478739,
+          "images_per_second": 4872.3595401612265
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 410591924,
+          "images_per_second": 4871.016410931648
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 403176763,
+          "images_per_second": 4960.603347073353
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 419578475,
+          "images_per_second": 4766.688758282941
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 409242185,
+          "images_per_second": 4887.081716661248
+        },
+        {
+          "round": 0,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 412369015,
+          "images_per_second": 4850.024922459317
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 414696645,
+          "images_per_second": 4822.802460820487
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 409980080,
+          "images_per_second": 4878.285793787834
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 420848792,
+          "images_per_second": 4752.300679052442
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 405327245,
+          "images_per_second": 4934.284642030417
+        },
+        {
+          "round": 1,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 409666162,
+          "images_per_second": 4882.023914877304
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 409336714,
+          "images_per_second": 4885.953132461996
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 405124068,
+          "images_per_second": 4936.7592744452795
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 420659522,
+          "images_per_second": 4754.438911761993
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 410128010,
+          "images_per_second": 4876.526233845867
+        },
+        {
+          "round": 1,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 414903428,
+          "images_per_second": 4820.398832665224
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 410308354,
+          "images_per_second": 4874.382840374729
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 412028327,
+          "images_per_second": 4854.035193556
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 403136436,
+          "images_per_second": 4961.099571758878
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 409166251,
+          "images_per_second": 4887.988672359979
+        },
+        {
+          "round": 2,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 419066009,
+          "images_per_second": 4772.517830239961
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 419135481,
+          "images_per_second": 4771.72678206167
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 409355922,
+          "images_per_second": 4885.723871364929
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 403504767,
+          "images_per_second": 4956.570934389977
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 412808061,
+          "images_per_second": 4844.866631613572
+        },
+        {
+          "round": 2,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 410798066,
+          "images_per_second": 4868.572093034148
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 420322921,
+          "images_per_second": 4758.246338890474
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 404949857,
+          "images_per_second": 4938.883087443589
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 409828300,
+          "images_per_second": 4880.092467992084
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 414625940,
+          "images_per_second": 4823.6248798133565
+        },
+        {
+          "round": 3,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 409316827,
+          "images_per_second": 4886.1905205768635
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 409210856,
+          "images_per_second": 4887.455869450345
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 414525900,
+          "images_per_second": 4824.788993884339
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 409964891,
+          "images_per_second": 4878.466531906021
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 405144277,
+          "images_per_second": 4936.513023976395
+        },
+        {
+          "round": 3,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 420492855,
+          "images_per_second": 4756.323386279655
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 402672404,
+          "images_per_second": 4966.816648304511
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 418838216,
+          "images_per_second": 4775.113453353072
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "baseline_function",
+          "elapsed_ns": 409917059,
+          "images_per_second": 4879.035785627063
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 411563142,
+          "images_per_second": 4859.521652694546
+        },
+        {
+          "round": 4,
+          "direction": "AB",
+          "decoder": "imgread_function",
+          "elapsed_ns": 409494555,
+          "images_per_second": 4884.0698260322415
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_function",
+          "elapsed_ns": 409272923,
+          "images_per_second": 4886.714677677321
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "imgread_loader",
+          "elapsed_ns": 411979765,
+          "images_per_second": 4854.607361601849
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_function",
+          "elapsed_ns": 410318804,
+          "images_per_second": 4874.2586995842385
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "baseline_loader",
+          "elapsed_ns": 419201457,
+          "images_per_second": 4770.975784084643
+        },
+        {
+          "round": 4,
+          "direction": "BA",
+          "decoder": "simplejpeg",
+          "elapsed_ns": 402836846,
+          "images_per_second": 4964.789144436902
+        }
+      ],
+      "throughput": {
+        "imgread_function": {
+          "median": 4886.388477092707,
+          "min": 4882.023914877304,
+          "max": 4887.988672359979
+        },
+        "imgread_loader": {
+          "median": 4847.445777036444,
+          "min": 4820.398832665224,
+          "max": 4859.521652694546
+        },
+        "simplejpeg": {
+          "median": 4958.5871407316645,
+          "min": 4934.284642030417,
+          "max": 4966.816648304511
+        },
+        "baseline_function": {
+          "median": 4875.454537110298,
+          "min": 4868.572093034148,
+          "max": 4880.092467992084
+        },
+        "baseline_loader": {
+          "median": 4768.114282721432,
+          "min": 4752.300679052442,
+          "max": 4775.113453353072
+        }
+      },
+      "paired_speedup": {
+        "baseline_loader": [
+          1.0173164250671636,
+          1.0143541947349852,
+          1.0162033370428851,
+          1.014067310035759,
+          1.0176029273967142
+        ],
+        "simplejpeg": [
+          0.9775122595554339,
+          0.9769180830339681,
+          0.9779408555869871,
+          0.9770154209631857,
+          0.978102346766979
+        ]
+      }
+    }
+  ]
+}

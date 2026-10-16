@@ -398,9 +398,10 @@ dependencies = [
 
 [[package]]
 name = "imgread"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "image",
+ "memchr",
  "numpy",
  "pyo3",
  "thiserror 2.0.20",

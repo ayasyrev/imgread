@@ -19,12 +19,12 @@ fn certificate(bytes: &[u8]) -> Option<bool> {
     loop {
         if entropy {
             loop {
-                let byte = *bytes.get(at)?;
-                at = at.checked_add(1)?;
-                if byte != 0xff {
-                    continue;
-                }
-                let start = at - 1;
+                // Entropy data can dwarf the headers. Search it with memchr's
+                // vectorized implementation while still inspecting every marker,
+                // including tables between progressive scans. No acceptance or
+                // table-independence checks are skipped.
+                let start = at.checked_add(memchr::memchr(0xff, bytes.get(at..)?)?)?;
+                at = start + 1;
                 while *bytes.get(at)? == 0xff {
                     at = at.checked_add(1)?;
                 }
@@ -206,6 +206,28 @@ mod tests {
         assert!(is_self_contained(&jpeg));
         for end in 0..jpeg.len() {
             assert!(!is_self_contained(&jpeg[..end]), "{end}");
+        }
+    }
+    #[test]
+    fn entropy_search_preserves_stuffing_restarts_and_truncation() {
+        let jpeg = jpeg();
+        let scan = jpeg.windows(2).position(|m| m == [0xff, 0xda]).unwrap();
+        let length = usize::from(u16::from_be_bytes([jpeg[scan + 2], jpeg[scan + 3]]));
+        let entropy = scan + 2 + length;
+        // These synthetic streams exercise marker certification, not the codec's
+        // entropy validation. Cover vector boundaries and markers resembling EOI.
+        for padding in [0, 15, 16, 31, 32, 63, 64, 127, 4097] {
+            let mut bytes = jpeg[..entropy].to_vec();
+            bytes.extend(std::iter::repeat_n(0x42, padding));
+            bytes.extend([0xff, 0x00, 0xd9, 0xff, 0x00, 0xda]);
+            for restart in 0xd0..=0xd7 {
+                bytes.extend([0xff, 0xff, restart]);
+            }
+            assert!(!is_self_contained(&bytes));
+            bytes.push(0xff);
+            assert!(!is_self_contained(&bytes));
+            bytes.extend([0xff, 0xd9]);
+            assert!(is_self_contained(&bytes));
         }
     }
     #[test]

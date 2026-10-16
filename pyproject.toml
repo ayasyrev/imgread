@@ -53,3 +53,6 @@ include = [
 Homepage = "https://github.com/ayasyrev/imgread"
 Repository = "https://github.com/ayasyrev/imgread"
 Issues = "https://github.com/ayasyrev/imgread/issues"
+
+[project.optional-dependencies]
+jpegli = ["ajpegli>=1.0,<2"]

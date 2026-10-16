@@ -1,0 +1,913 @@
+{
+  "command": [
+    "experiments/borrowed_bytes/compare.py",
+    "--build",
+    "/tmp/imgread-borrow-static-verified-20261004",
+    "--buffers",
+    "/tmp/imgread-release-followup/buffers",
+    "--output",
+    "experiments/borrowed_bytes/results/smoke-static.json",
+    "--count",
+    "8",
+    "--blocks",
+    "1",
+    "--repeat",
+    "1"
+  ],
+  "python": "3.12.13 (main, Jul 18 2026, 17:02:19) [Clang 22.1.3 ]",
+  "numpy": "2.5.3",
+  "simplejpeg": "1.9.0",
+  "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.43",
+  "cpu": 3,
+  "build": {
+    "baseline": "ee98d996d0388bef66f0182c4acfae20a146c81c",
+    "candidate_base": "ee98d996d0388bef66f0182c4acfae20a146c81c",
+    "candidate_patch": "diff --git a/src/lib.rs b/src/lib.rs\nindex 12e9619..dd863a8 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -5,7 +5,7 @@ use pyo3::{\n     prelude::*,\n     types::{PyAny, PyBytes, PyModule, PyString, PyTuple},\n };\n-use std::path::PathBuf;\n+use std::{borrow::Cow, path::PathBuf};\n \n pub mod decoder;\n pub mod error;\n@@ -51,23 +51,19 @@ fn python_path(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<PathBuf> {\n     path.extract()\n }\n \n-fn buffer_bytes(\n+fn buffer_bytes<'a>(\n     py: Python<'_>,\n-    data: &Bound<'_, PyAny>,\n+    data: &'a Bound<'_, PyAny>,\n     limits: DecodeLimits,\n-) -> PyResult<Vec<u8>> {\n-    // Immutable bytes can be copied directly with safe Rust after fallible\n-    // reservation, avoiding a redundant zero-fill of a potentially large input.\n+) -> PyResult<Cow<'a, [u8]>> {\n+    // The live Python argument owns immutable storage throughout detach and\n+    // any NumPy allocator callbacks. Other exporters need a private snapshot:\n+    // even a read-only view can have a mutable backing allocation.\n     if let Ok(bytes) = data.cast::<PyBytes>() {\n         let source = bytes.as_bytes();\n         let length = u64::try_from(source.len()).map_err(|_| arithmetic_limit().to_pyerr())?;\n-        let size = limits.check_input(length).map_err(|err| err.to_pyerr())?;\n-        let mut owned = Vec::new();\n-        owned.try_reserve_exact(size).map_err(|err| {\n-            ImgReadError::LimitExceeded(format!(\"input allocation failed: {err}\")).to_pyerr()\n-        })?;\n-        owned.extend_from_slice(source);\n-        return Ok(owned);\n+        limits.check_input(length).map_err(|err| err.to_pyerr())?;\n+        return Ok(Cow::Borrowed(source));\n     }\n     let buffer = PyBuffer::<u8>::get(data)\n         .map_err(|_| PyTypeError::new_err(\"data must be a uint8-compatible buffer\"))?;\n@@ -77,7 +73,7 @@ fn buffer_bytes(\n     buffer\n         .copy_to_slice(py, &mut bytes)\n         .map_err(|_| PyTypeError::new_err(\"data must be a uint8-compatible buffer\"))?;\n-    Ok(bytes)\n+    Ok(Cow::Owned(bytes))\n }\n \n fn to_numpy(\n@@ -136,7 +132,7 @@ fn load_numpy(\n }\n \n /// Decode a uint8-compatible buffer to a writable C-contiguous H\u00d7W\u00d73 uint8 array.\n-/// Strided buffers are copied in C order before releasing the GIL.\n+/// Immutable bytes are borrowed; other buffers are copied in C order before releasing the GIL.\n /// Options, exceptions and warnings match load_numpy; limits is keyword-only.\n #[pyfunction(signature = (data, color = \"rgb\", dtype = \"uint8\", backend = \"auto\", *, limits = \"safe\"))]\n fn load_numpy_from_bytes(\n@@ -174,7 +170,8 @@ fn load_numpy_simple(py: Python<'_>, path: &Bound<'_, PyAny>, limits: &str) -> P\n \n /// Decode a JPEG uint8-compatible buffer to an H\u00d7W\u00d73 uint8 RGB array.\n /// Uses TurboJPEG with image fallback and RuntimeWarning. Non-JPEG raises ValueError.\n-/// Strided buffers are accepted; limits is safe (default) or trusted-only unlimited.\n+/// Immutable bytes are borrowed; other buffers are copied in C order before releasing the GIL.\n+/// Limits is safe (default) or trusted-only unlimited.\n #[pyfunction(signature = (data, *, limits = \"safe\"))]\n fn load_numpy_simple_from_bytes(\n     py: Python<'_>,\n@@ -215,3 +212,43 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {\n     m.add_function(wrap_pyfunction!(supported_backends, m)?)?;\n     Ok(())\n }\n+\n+#[cfg(test)]\n+mod buffer_tests {\n+    use super::*;\n+    use pyo3::{exceptions::PyValueError, types::PyByteArray};\n+\n+    #[test]\n+    fn immutable_input_uses_the_original_storage() {\n+        Python::attach(|py| {\n+            let source = PyBytes::new(py, b\"jpeg bytes\");\n+            let input = buffer_bytes(py, source.as_any(), DecodeLimits::SAFE).unwrap();\n+            assert_eq!(input.as_ptr(), source.as_bytes().as_ptr());\n+            assert_eq!(&*input, source.as_bytes());\n+        });\n+    }\n+\n+    #[test]\n+    fn mutable_input_is_an_independent_snapshot() {\n+        Python::attach(|py| {\n+            let source = PyByteArray::new(py, b\"jpeg bytes\");\n+            let input = buffer_bytes(py, source.as_any(), DecodeLimits::SAFE).unwrap();\n+            source.call_method1(\"__setitem__\", (0, b'X')).unwrap();\n+            assert_eq!(&*input, b\"jpeg bytes\");\n+        });\n+    }\n+\n+    #[test]\n+    fn borrowed_input_still_obeys_the_input_limit() {\n+        Python::attach(|py| {\n+            let source = PyBytes::new(py, b\"jpeg bytes\");\n+            let limits = DecodeLimits {\n+                max_input_bytes: Some(3),\n+                ..DecodeLimits::SAFE\n+            };\n+            let error = buffer_bytes(py, source.as_any(), limits).unwrap_err();\n+            assert!(error.is_instance_of::<PyValueError>(py));\n+            assert!(error.to_string().contains(\"max_input_bytes\"));\n+        });\n+    }\n+}",
+    "python": "3.12.13 (main, Jul 18 2026, 17:02:19) [Clang 22.1.3 ]",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "compiler": "gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "environment": {
+      "CARGO_TARGET_DIR": "/tmp/imgread-borrow-static-verified-20261004/target",
+      "CARGO_NET_OFFLINE": "true",
+      "CARGO_BUILD_JOBS": "4",
+      "PYO3_PYTHON": "/home/albu/Prj/AYA/imgread_benchmark/worktree/ram-image-codecs/experiments/ram_image_codecs/.venv/bin/python",
+      "CC": "/usr/bin/gcc",
+      "CFLAGS": "-O3 -fno-lto",
+      "LDFLAGS": "-fno-lto",
+      "TURBOJPEG_SOURCE": "vendor",
+      "TURBOJPEG_STATIC": "1",
+      "TURBOJPEG_DYNAMIC": "0"
+    },
+    "command": [
+      "cargo",
+      "build",
+      "--release",
+      "--locked",
+      "--offline",
+      "--features",
+      "extension-module,turbojpeg"
+    ],
+    "variants": {
+      "baseline": {
+        "source": "/tmp/imgread-borrow-static-verified-20261004/baseline-source",
+        "install": "/tmp/imgread-borrow-static-verified-20261004/baseline",
+        "ldd": "linux-vdso.so.1 (0x000071509555e000)\n\tlibgcc_s.so.1 => /usr/lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000715095222000)\n\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x00007150950fc000)\n\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x0000715094e00000)\n\t/lib64/ld-linux-x86-64.so.2 (0x0000715095560000)"
+      },
+      "candidate": {
+        "source": "/home/albu/Prj/AYA/imgread/worktree/borrowed-bytes-20261004",
+        "install": "/tmp/imgread-borrow-static-verified-20261004/candidate",
+        "ldd": "linux-vdso.so.1 (0x00007e5385e30000)\n\tlibgcc_s.so.1 => /usr/lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007e5385af4000)\n\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x00007e53859ce000)\n\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x00007e5385600000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007e5385e32000)"
+      }
+    }
+  },
+  "module_paths": {
+    "baseline": "/tmp/imgread-borrow-static-verified-20261004/baseline/imgread/_native.cpython-312-x86_64-linux-gnu.so",
+    "candidate": "/tmp/imgread-borrow-static-verified-20261004/candidate/imgread/_native.cpython-312-x86_64-linux-gnu.so"
+  },
+  "simplejpeg_path": "/home/albu/Prj/AYA/imgread_benchmark/worktree/ram-image-codecs/experiments/ram_image_codecs/.venv/lib/python3.12/site-packages/simplejpeg/__init__.py",
+  "native_runtime_maps": [],
+  "allocation": "default",
+  "endpoint": "RAM lookup + public decode + fresh owned RGB output + disposal",
+  "protocol": "paired shuffled forward/reverse blocks; validation returns before timing",
+  "blocks": 1,
+  "passes_per_sample": 1,
+  "rows": [
+    {
+      "case": "jpeg-turbo-q100-b420",
+      "inputs": [
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0000.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0001.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0002.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0003.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0004.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0005.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0006.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q100-b420/0007.jpg"
+      ],
+      "validation": {
+        "images": 8,
+        "shapes": [
+          [
+            256,
+            256,
+            3
+          ]
+        ],
+        "exact_rgb": true,
+        "fresh_owned_writable_output": true
+      },
+      "mean_encoded_bytes": 52860.625,
+      "median_us": {
+        "baseline.function": 392.447875,
+        "baseline.simple": 390.9313125,
+        "baseline.loader": 381.976125,
+        "candidate.function": 380.2935625,
+        "candidate.simple": 377.5985,
+        "candidate.loader": 384.7645,
+        "simplejpeg": 375.6785
+      },
+      "pairs": {
+        "candidate.function_over_baseline.function": {
+          "median_percent": -3.097051423708186,
+          "range_percent": [
+            -3.097051423708186,
+            -3.097051423708186
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.function_over_simplejpeg": {
+          "median_percent": 1.2284606385513097,
+          "range_percent": [
+            1.2284606385513097,
+            1.2284606385513097
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_baseline.simple": {
+          "median_percent": -3.4105256022437413,
+          "range_percent": [
+            -3.4105256022437413,
+            -3.4105256022437413
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.simple_over_simplejpeg": {
+          "median_percent": 0.5110752944339492,
+          "range_percent": [
+            0.5110752944339492,
+            0.5110752944339492
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_baseline.loader": {
+          "median_percent": 0.7299867236466584,
+          "range_percent": [
+            0.7299867236466584,
+            0.7299867236466584
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_simplejpeg": {
+          "median_percent": 2.4185573568889396,
+          "range_percent": [
+            2.4185573568889396,
+            2.4185573568889396
+          ],
+          "candidate_slower_blocks": 1
+        }
+      },
+      "blocks": [
+        {
+          "order": [
+            "candidate.simple",
+            "candidate.loader",
+            "baseline.function",
+            "candidate.function",
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.simple",
+            "candidate.function",
+            "baseline.function",
+            "candidate.loader",
+            "candidate.simple"
+          ],
+          "samples": {
+            "candidate.simple": [
+              {
+                "wall_us": 378.208375,
+                "cpu_us": 378.340875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 376.988625,
+                "cpu_us": 377.1035,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 383.791375,
+                "cpu_us": 383.90375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 385.737625,
+                "cpu_us": 385.84875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 395.211875,
+                "cpu_us": 395.34775,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 389.683875,
+                "cpu_us": 389.80475,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 381.02375,
+                "cpu_us": 381.146125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 379.563375,
+                "cpu_us": 379.689625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 389.58875,
+                "cpu_us": 389.712125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 392.273875,
+                "cpu_us": 392.395875,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 374.7805,
+                "cpu_us": 374.894375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 376.5765,
+                "cpu_us": 376.709125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 382.1195,
+                "cpu_us": 382.234375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 381.83275,
+                "cpu_us": 381.942625,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.simple": 377.5985,
+            "candidate.loader": 384.7645,
+            "baseline.function": 392.447875,
+            "candidate.function": 380.2935625,
+            "baseline.simple": 390.9313125,
+            "simplejpeg": 375.6785,
+            "baseline.loader": 381.976125
+          },
+          "cpu_us": {
+            "candidate.simple": 377.7221875,
+            "candidate.loader": 384.87625,
+            "baseline.function": 392.57625,
+            "candidate.function": 380.417875,
+            "baseline.simple": 391.054,
+            "simplejpeg": 375.80174999999997,
+            "baseline.loader": 382.0885
+          }
+        }
+      ]
+    },
+    {
+      "case": "jpeg-turbo-q50-b420",
+      "inputs": [
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0000.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0001.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0002.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0003.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0004.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0005.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0006.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q50-b420/0007.jpg"
+      ],
+      "validation": {
+        "images": 8,
+        "shapes": [
+          [
+            256,
+            256,
+            3
+          ]
+        ],
+        "exact_rgb": true,
+        "fresh_owned_writable_output": true
+      },
+      "mean_encoded_bytes": 8245,
+      "median_us": {
+        "baseline.function": 130.38993749999997,
+        "baseline.simple": 129.44818750000002,
+        "baseline.loader": 138.2293125,
+        "candidate.function": 139.434125,
+        "candidate.simple": 138.7151875,
+        "candidate.loader": 140.1246875,
+        "simplejpeg": 137.757
+      },
+      "pairs": {
+        "candidate.function_over_baseline.function": {
+          "median_percent": 6.936261856863024,
+          "range_percent": [
+            6.936261856863024,
+            6.936261856863024
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.function_over_simplejpeg": {
+          "median_percent": 1.2174517447389066,
+          "range_percent": [
+            1.2174517447389066,
+            1.2174517447389066
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_baseline.simple": {
+          "median_percent": 7.158848786507721,
+          "range_percent": [
+            7.158848786507721,
+            7.158848786507721
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_simplejpeg": {
+          "median_percent": 0.6955635648279168,
+          "range_percent": [
+            0.6955635648279168,
+            0.6955635648279168
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_baseline.loader": {
+          "median_percent": 1.3711816732069781,
+          "range_percent": [
+            1.3711816732069781,
+            1.3711816732069781
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_simplejpeg": {
+          "median_percent": 1.7187420602945647,
+          "range_percent": [
+            1.7187420602945647,
+            1.7187420602945647
+          ],
+          "candidate_slower_blocks": 1
+        }
+      },
+      "blocks": [
+        {
+          "order": [
+            "candidate.simple",
+            "candidate.loader",
+            "baseline.function",
+            "candidate.function",
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.simple",
+            "candidate.function",
+            "baseline.function",
+            "candidate.loader",
+            "candidate.simple"
+          ],
+          "samples": {
+            "candidate.simple": [
+              {
+                "wall_us": 141.285,
+                "cpu_us": 141.44025,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 136.145375,
+                "cpu_us": 136.255625,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 138.24925,
+                "cpu_us": 138.367,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 142.000125,
+                "cpu_us": 142.1215,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 131.212125,
+                "cpu_us": 131.340125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 129.56775,
+                "cpu_us": 129.682,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 139.12975,
+                "cpu_us": 139.237375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 139.7385,
+                "cpu_us": 139.84475,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 129.559,
+                "cpu_us": 129.682,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 129.337375,
+                "cpu_us": 129.45775,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 138.876625,
+                "cpu_us": 138.988125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 136.637375,
+                "cpu_us": 136.75025,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 139.4855,
+                "cpu_us": 139.609375,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 136.973125,
+                "cpu_us": 137.084625,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.simple": 138.7151875,
+            "candidate.loader": 140.1246875,
+            "baseline.function": 130.38993749999997,
+            "candidate.function": 139.434125,
+            "baseline.simple": 129.44818750000002,
+            "simplejpeg": 137.757,
+            "baseline.loader": 138.2293125
+          },
+          "cpu_us": {
+            "candidate.simple": 138.8479375,
+            "candidate.loader": 140.24425,
+            "baseline.function": 130.51106249999998,
+            "candidate.function": 139.5410625,
+            "baseline.simple": 129.569875,
+            "simplejpeg": 137.8691875,
+            "baseline.loader": 138.34699999999998
+          }
+        }
+      ]
+    },
+    {
+      "case": "jpeg-turbo-q90-b420",
+      "inputs": [
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0000.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0001.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0002.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0003.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0004.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0005.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0006.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-b420/0007.jpg"
+      ],
+      "validation": {
+        "images": 8,
+        "shapes": [
+          [
+            256,
+            256,
+            3
+          ]
+        ],
+        "exact_rgb": true,
+        "fresh_owned_writable_output": true
+      },
+      "mean_encoded_bytes": 20254.75,
+      "median_us": {
+        "baseline.function": 204.9193125,
+        "baseline.simple": 205.9405625,
+        "baseline.loader": 203.474625,
+        "candidate.function": 206.25187499999998,
+        "candidate.simple": 204.725125,
+        "candidate.loader": 207.404,
+        "simplejpeg": 203.8785
+      },
+      "pairs": {
+        "candidate.function_over_baseline.function": {
+          "median_percent": 0.6502864389611895,
+          "range_percent": [
+            0.6502864389611895,
+            0.6502864389611895
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.function_over_simplejpeg": {
+          "median_percent": 1.1641124493264376,
+          "range_percent": [
+            1.1641124493264376,
+            1.1641124493264376
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_baseline.simple": {
+          "median_percent": -0.5901884918858569,
+          "range_percent": [
+            -0.5901884918858569,
+            -0.5901884918858569
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.simple_over_simplejpeg": {
+          "median_percent": 0.41525957862158513,
+          "range_percent": [
+            0.41525957862158513,
+            0.41525957862158513
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_baseline.loader": {
+          "median_percent": 1.9311376049961915,
+          "range_percent": [
+            1.9311376049961915,
+            1.9311376049961915
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_simplejpeg": {
+          "median_percent": 1.7292161753200919,
+          "range_percent": [
+            1.7292161753200919,
+            1.7292161753200919
+          ],
+          "candidate_slower_blocks": 1
+        }
+      },
+      "blocks": [
+        {
+          "order": [
+            "candidate.simple",
+            "candidate.loader",
+            "baseline.function",
+            "candidate.function",
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.simple",
+            "candidate.function",
+            "baseline.function",
+            "candidate.loader",
+            "candidate.simple"
+          ],
+          "samples": {
+            "candidate.simple": [
+              {
+                "wall_us": 204.645625,
+                "cpu_us": 204.781625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 204.804625,
+                "cpu_us": 204.928125,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 203.338125,
+                "cpu_us": 203.452875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 211.469875,
+                "cpu_us": 211.596875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 205.304375,
+                "cpu_us": 205.421625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 204.53425,
+                "cpu_us": 204.655,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 203.960625,
+                "cpu_us": 204.06775,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 208.543125,
+                "cpu_us": 208.667625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 206.278625,
+                "cpu_us": 206.462125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 205.6025,
+                "cpu_us": 205.734625,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 204.37125,
+                "cpu_us": 204.484875,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 203.38575,
+                "cpu_us": 203.514125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 204.59175,
+                "cpu_us": 204.7115,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 202.3575,
+                "cpu_us": 202.45975,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.simple": 204.725125,
+            "candidate.loader": 207.404,
+            "baseline.function": 204.9193125,
+            "candidate.function": 206.25187499999998,
+            "baseline.simple": 205.9405625,
+            "simplejpeg": 203.8785,
+            "baseline.loader": 203.474625
+          },
+          "cpu_us": {
+            "candidate.simple": 204.854875,
+            "candidate.loader": 207.524875,
+            "baseline.function": 205.03831250000002,
+            "candidate.function": 206.3676875,
+            "baseline.simple": 206.09837499999998,
+            "simplejpeg": 203.9995,
+            "baseline.loader": 203.585625
+          }
+        }
+      ]
+    },
+    {
+      "case": "jpeg-turbo-q90-p420",
+      "inputs": [
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0000.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0001.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0002.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0003.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0004.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0005.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0006.jpg",
+        "/tmp/imgread-release-followup/buffers/jpeg-turbo-q90-p420/0007.jpg"
+      ],
+      "validation": {
+        "images": 8,
+        "shapes": [
+          [
+            256,
+            256,
+            3
+          ]
+        ],
+        "exact_rgb": true,
+        "fresh_owned_writable_output": true
+      },
+      "mean_encoded_bytes": 19497.5,
+      "median_us": {
+        "baseline.function": 497.489125,
+        "baseline.simple": 497.85406250000005,
+        "baseline.loader": 496.9335625,
+        "candidate.function": 497.1334375,
+        "candidate.simple": 498.673125,
+        "candidate.loader": 499.4001875,
+        "simplejpeg": 528.1848749999999
+      },
+      "pairs": {
+        "candidate.function_over_baseline.function": {
+          "median_percent": -0.07149653773838027,
+          "range_percent": [
+            -0.07149653773838027,
+            -0.07149653773838027
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.function_over_simplejpeg": {
+          "median_percent": -5.878895623431079,
+          "range_percent": [
+            -5.878895623431079,
+            -5.878895623431079
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.simple_over_baseline.simple": {
+          "median_percent": 0.16451859323733942,
+          "range_percent": [
+            0.16451859323733942,
+            0.16451859323733942
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.simple_over_simplejpeg": {
+          "median_percent": -5.58739021067195,
+          "range_percent": [
+            -5.58739021067195,
+            -5.58739021067195
+          ],
+          "candidate_slower_blocks": 0
+        },
+        "candidate.loader_over_baseline.loader": {
+          "median_percent": 0.4963691700739181,
+          "range_percent": [
+            0.4963691700739181,
+            0.4963691700739181
+          ],
+          "candidate_slower_blocks": 1
+        },
+        "candidate.loader_over_simplejpeg": {
+          "median_percent": -5.449737177725867,
+          "range_percent": [
+            -5.449737177725867,
+            -5.449737177725867
+          ],
+          "candidate_slower_blocks": 0
+        }
+      },
+      "blocks": [
+        {
+          "order": [
+            "candidate.simple",
+            "candidate.loader",
+            "baseline.function",
+            "candidate.function",
+            "baseline.simple",
+            "simplejpeg",
+            "baseline.loader",
+            "baseline.loader",
+            "simplejpeg",
+            "baseline.simple",
+            "candidate.function",
+            "baseline.function",
+            "candidate.loader",
+            "candidate.simple"
+          ],
+          "samples": {
+            "candidate.simple": [
+              {
+                "wall_us": 501.132125,
+                "cpu_us": 501.282625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 496.214125,
+                "cpu_us": 496.333375,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.loader": [
+              {
+                "wall_us": 498.066375,
+                "cpu_us": 498.195625,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 500.734,
+                "cpu_us": 500.855625,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.function": [
+              {
+                "wall_us": 499.53425,
+                "cpu_us": 499.67225,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 495.444,
+                "cpu_us": 495.567,
+                "minor_faults": 0
+              }
+            ],
+            "candidate.function": [
+              {
+                "wall_us": 497.70075,
+                "cpu_us": 497.83125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 496.566125,
+                "cpu_us": 496.687875,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.simple": [
+              {
+                "wall_us": 499.76575,
+                "cpu_us": 499.05475,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 495.942375,
+                "cpu_us": 496.072875,
+                "minor_faults": 0
+              }
+            ],
+            "simplejpeg": [
+              {
+                "wall_us": 529.317,
+                "cpu_us": 529.4605,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 527.05275,
+                "cpu_us": 527.17125,
+                "minor_faults": 0
+              }
+            ],
+            "baseline.loader": [
+              {
+                "wall_us": 499.261125,
+                "cpu_us": 499.394125,
+                "minor_faults": 0
+              },
+              {
+                "wall_us": 494.606,
+                "cpu_us": 494.721625,
+                "minor_faults": 0
+              }
+            ]
+          },
+          "wall_us": {
+            "candidate.simple": 498.673125,
+            "candidate.loader": 499.4001875,
+            "baseline.function": 497.489125,
+            "candidate.function": 497.1334375,
+            "baseline.simple": 497.85406250000005,
+            "simplejpeg": 528.1848749999999,
+            "baseline.loader": 496.9335625
+          },
+          "cpu_us": {
+            "candidate.simple": 498.808,
+            "candidate.loader": 499.525625,
+            "baseline.function": 497.61962500000004,
+            "candidate.function": 497.2595625,
+            "baseline.simple": 497.56381250000004,
+            "simplejpeg": 528.315875,
+            "baseline.loader": 497.05787499999997
+          }
+        }
+      ]
+    }
+  ],
+  "complete": true
+}

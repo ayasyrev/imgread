@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — 2026-10-16
+
+- Add `encode_jpeg(image, ...)` using the optional `imgread[jpegli]` extra to
+  prepare JPEG caches from RGB/BGR uint8 arrays. Sequential JPEG is the default;
+  quality, chroma subsampling and progressive level are configurable.
+- Speed up Loader's JPEG table-independence check with vectorized marker search,
+  preserving checks across all scans and the existing decoder/pixel settings.
+- Decode native JPEG output directly into NumPy-owned storage, avoiding an
+  intermediate output buffer. Results remain independent writable arrays.
+- Borrow immutable `bytes` in the functional decode APIs as well as Loader;
+  copy mutable and other buffer inputs before releasing the GIL.
+
 ## 0.2.1 — 2026-09-16
 
 - Add `imgread.Loader` for repeated decoding with fixed options:

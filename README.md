@@ -32,8 +32,8 @@ shape `(height, width, 3)` and dtype `uint8`. The default order is RGB; `color="
 reverses the channels. Only `dtype="uint8"` is supported. Color, dtype, backend and
 limit-profile names are case-insensitive. Bytes paths are rejected; use the buffer
 APIs for encoded bytes. Decoding releases the GIL. The standalone buffer functions
-copy their input; `Loader.decode` borrows immutable `bytes` for the duration of the
-call and copies other buffer types before releasing the GIL.
+and `Loader.decode` borrow immutable `bytes` for the duration of the call and copy
+other buffer types, including read-only views, before releasing the GIL.
 
 - JPEG: baseline, progressive, grayscale and CMYK. CMYK may use the fallback
   decoder. Decoder rounding and chroma upsampling can produce small pixel
@@ -77,6 +77,48 @@ its own decoder lazily. Keep one Loader per worker; overlapping or reentrant cal
 on the same instance raise `RuntimeError`. Buffer data belongs to the caller and
 is not included in the Loader's pickle. Preloading an entire dataset is optional
 and has its own memory and worker-startup costs.
+
+## Preparing a JPEG cache with jpegli
+
+Install the optional encoder with `python -m pip install 'imgread[jpegli]'`.
+`encode_jpeg` uses [ajpegli](https://github.com/dKosarevsky/ajpegli), a binding to
+Google's jpegli. The training/reading environment needs only imgread: the cache
+contains ordinary JPEG bytes, decoded by the existing TurboJPEG backend.
+The optional encoder has its own wheel requirements: ajpegli 1.0.0 provides
+CPython 3.11–3.13 wheels for imgread's platforms, with glibc 2.27+ required on
+Linux. Python 3.14 or older Linux systems may require an ajpegli source build.
+
+```python
+import imgread
+
+# Prepare once, outside the training loop. Input is HWC uint8 RGB.
+encoded = imgread.encode_jpeg(rgb, quality=90, subsampling="420")
+
+# Keep immutable bytes in RAM, or save them in your existing cache storage.
+loader = imgread.Loader()  # one per worker
+restored = loader.decode(encoded)
+```
+
+`encode_jpeg(image, *, quality=90, subsampling="420", progressive=False,
+color="rgb")` accepts NumPy arrays of shape `(height, width, 3)` and dtype `uint8`.
+Both dimensions must be in 1..65500. Strided arrays are copied to contiguous
+storage; `color="bgr"` also swaps channels. The function returns immutable `bytes`.
+It rejects other dtypes, grayscale and alpha rather than implicitly changing the
+pixels. Do not mutate the source array until encoding returns.
+
+Quality is an integer in 1..100; even 100 is lossy. Subsampling can be `"420"`,
+`"422"`, `"440"` or `"444"`. Sequential encoding is the default for cache reads;
+`progressive=True` selects jpegli level 2, or use an integer level from 0 to 3.
+Progressive encoding can save space but adds decoding work; compare size, quality
+and read speed on your data. Equal quality numbers across encoders do not mean
+equal reconstructed quality. Adaptive quantization and optimized Huffman tables
+are enabled; no metadata or ICC transform is applied. Encoded bytes may change
+with the ajpegli/jpegli version, so pin the encoder when preparing reproducible
+caches.
+
+Missing ajpegli raises `ImportError` with installation guidance only when encoding
+is requested; ordinary imports and decoding do not require it. Invalid input
+raises `TypeError`/`ValueError`, and native encoding failures raise `RuntimeError`.
 
 ## Backends and the simple API
 
@@ -149,7 +191,7 @@ manylinux2014 (glibc 2.17+) and macOS x86_64 (10.13+) / arm64 (11.0+).
 Windows, Linux aarch64, musllinux, PyPy, free-threaded CPython and Python 3.15 are
 not supported by this beta. The 3.15 compatibility CI job is informational.
 
-Loader and the five functions above form the beta API. Bug fixes can change rejection of
+Loader and the functions above form the beta API. Bug fixes can change rejection of
 malformed inputs, limits or decoder results. Intentional API changes will be
 recorded in release notes and beta versions; pin a version for reproducible work.
 The Rust crate is internal and is not published to crates.io.
@@ -183,10 +225,10 @@ the full package matrix without publishing.
 1. Update `Cargo.toml`, its root `Cargo.lock` entry and `CHANGELOG.md`, then merge
    the reviewed changes into `main`.
 2. Permit the release tag in the GitHub `pypi` environment deployment policy.
-   Currently only `v0.2.1` is allowed. Keep its required reviewer enabled.
+   For this release, add the exact tag `v0.3.0`. Keep its required reviewer enabled.
 3. Create and push an annotated tag matching the package version, for example
-   `git tag -a v0.2.1 -m 'Release imgread 0.2.1'` followed by
-   `git push origin v0.2.1`. These commands assume that tag does not exist yet.
+   `git tag -a v0.3.0 -m 'Release imgread 0.3.0'` followed by
+   `git push origin v0.3.0`. These commands assume that tag does not exist yet.
 4. **Publish release** checks the tag/version and runs CI. It builds and tests
    12 wheels (CPython 3.11–3.14; Linux x86_64 and macOS x86_64/arm64), rebuilds
    the sdist, validates package metadata and saves SHA256SUMS.
